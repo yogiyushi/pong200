@@ -369,9 +369,19 @@ function updateGame(delta) {
   }
 }
 
+function getCanvasHeight() {
+  const visibleZoneWidth = state.config.zoneWidth * getViewScale();
+  const height = Math.round(visibleZoneWidth * 3);
+  return clamp(height, 450, 600);
+}
+
 function getViewScale() {
   const cssWidth = canvas.clientWidth;
-  return state.worldWidth > cssWidth ? cssWidth / state.worldWidth : 1;
+  const minScale = 150 / state.config.zoneWidth;
+  if (state.worldWidth <= cssWidth) {
+    return 1;
+  }
+  return Math.max(cssWidth / state.worldWidth, minScale);
 }
 
 function cameraXForCurrentPlayer() {
@@ -497,9 +507,11 @@ function updateUI() {
   playerCountEl.textContent = state.players.length;
   ballCountEl.textContent = state.balls.length;
   refreshUI();
+  resizeCanvas();
 }
 
 function resizeCanvas() {
+  canvas.style.height = `${getCanvasHeight()}px`;
   const rect = canvas.getBoundingClientRect();
   canvas.width = Math.floor(rect.width * devicePixelRatio);
   canvas.height = Math.floor(rect.height * devicePixelRatio);
@@ -532,7 +544,7 @@ function attachEvents() {
     state.config.zoneWidth = Number(zoneWidthInput.value);
     zoneWidthLabel.textContent = zoneWidthInput.value;
     syncWorld();
-    render();
+    resizeCanvas();
   });
 
   ballIntervalInput.addEventListener('input', () => {
@@ -632,6 +644,7 @@ function attachEvents() {
   });
 
   window.addEventListener('resize', resizeCanvas);
+  window.addEventListener('load', resizeCanvas);
 }
 
 function gameLoop() {
