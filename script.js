@@ -52,6 +52,8 @@ const state = {
     ballRadius: 3,
     spawnInterval: 5000,
     maxBallsFactor: 2,
+    minBallSpeed: 2.8,
+    maxBallSpeed: 4.0,
     topInset: 10,
     bottomInset: 10,
     worldLeft: 0,
@@ -181,7 +183,8 @@ function spawnBall() {
   const minY = state.config.topInset + state.config.ballRadius + 12;
   const maxY = height - state.config.bottomInset - state.config.ballRadius - 12;
   const angle = ((Math.random() * 80 - 40) * Math.PI) / 180;
-  const speed = 2.8 + Math.random() * 1.2;
+  const speedRange = Math.max(0, state.config.maxBallSpeed - state.config.minBallSpeed);
+  const speed = (state.config.minBallSpeed + Math.random() * speedRange) * 10;
   state.balls.push({
     x: 8,
     y: minY + Math.random() * (maxY - minY),
