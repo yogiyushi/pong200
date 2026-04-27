@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pong200</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="top-bar">
+      <div class="brand">Pong200</div>
+      <div class="status">
+        <span>Players: <strong id="playerCount">0</strong></span>
+        <span>Balls: <strong id="ballCount">0</strong></span>
+      </div>
+      <div class="top-menu">
+        <button id="optionsToggle" class="icon-button" aria-label="Options">
+          <img src="icons/density_medium_24dp_E3E3E3_FILL0_wght400_GRAD0_opsz24.svg" alt="Options" />
+        </button>
+        <div id="optionsMenu" class="options-menu hidden" role="menu" aria-hidden="true">
+          <div class="menu-header">Options</div>
+          <div class="menu-item">
+            <label for="zoneWidth">Zone width</label>
+            <input id="zoneWidth" type="range" min="120" max="320" value="200" />
+            <div class="menu-note"><span id="zoneWidthLabel">200</span> px</div>
+          </div>
+          <div class="menu-item">
+            <label for="ballInterval">Ball interval</label>
+            <input id="ballInterval" type="range" min="2000" max="8000" step="500" value="5000" />
+            <div class="menu-note"><span id="ballIntervalLabel">5s</span></div>
+          </div>
+          <div class="menu-item">
+            <label for="minBallSpeed">Min ball speed</label>
+            <input id="minBallSpeed" type="range" min="1" max="8" step="0.1" value="2.8" />
+            <div class="menu-note"><span id="minBallSpeedLabel">2.8</span></div>
+          </div>
+          <div class="menu-item">
+            <label for="maxBallSpeed">Max ball speed</label>
+            <input id="maxBallSpeed" type="range" min="1" max="10" step="0.1" value="4.0" />
+            <div class="menu-note"><span id="maxBallSpeedLabel">4.0</span></div>
+          </div>
+          <div class="menu-item">
+            <label for="maxBallsFactor">Max balls per player</label>
+            <input id="maxBallsFactor" type="number" min="1" max="4" value="2" />
+          </div>
+          <div class="menu-item checkbox-item">
+            <label>
+              <input id="menuFlipView" type="checkbox" />
+              Flip top-player view
+            </label>
+          </div>
+          <div class="menu-header">Join game</div>
+          <div class="menu-item">
+            <label for="playerName">Name</label>
+            <input id="playerName" type="text" value="You" maxlength="12" />
+          </div>
+          <div class="menu-item">
+            <label for="playerFlag">Flag</label>
+            <select id="playerFlag"></select>
+          </div>
+          <button id="joinButton" class="menu-button">Join game</button>
+          <button id="addBotButton" class="menu-button">+ Add bot</button>
+          <button id="resetButton" class="menu-button">Reset game</button>
+          <div class="menu-header">Players</div>
+          <div id="playerList" class="player-list"></div>
+        </div>
+      </div>
+    </header>
+    <div class="info-bar">Use the options menu in the top right for game settings and player controls.</div>
+    <main class="main-grid">
+      <section class="game-panel">
+        <canvas id="pongCanvas" tabindex="0" width="960" height="420"></canvas>
+    </main>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>

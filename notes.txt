@@ -1,0 +1,40 @@
+i would like code for an html  pong game, written in one html file plus 1 css and 1 js file
+
+users who enter are  automatically added as a top or bottom player based on how many players on top or bottom to make it as even as possible so it could be 10 on top vs 9 on bottom
+
+new players are added to the left  with a new goalpost, the existing goalpost to the right is between them and an existing player if they exist
+
+
+
+each players paddle is 40px and each players area to defend is 200px but can be changed in settings
+
+the longer you survive the further to the right you end up as new players added in from left
+
+the game is played horizontally on phone so for horizontal   ,  
+
+as this is fast paced game with many pong players and multiple balls updates need to be frequent  using ably backend with up to 200 players 
+
+each player may  only see a small section of overall game if many players
+
+
+whether you are on top or bottom it allways seems as though you are on bottom from players perscective
+
+
+every 5 seconds a ball is introduced from left edge at random angle, can be set in settings , only add ball though if less than total players x 2
+
+to the left of players on left are solid walls top and bottom for ball to bounce off as they enter player zones to the right
+
+
+lets make this simply and elegantly, black and white minimalist style 6px circular balls  
+
+if a player repels a ball they get 1 point, if a player misses a ball they are asked if they want to play again then get inserted in far left
+
+players can pick a country flag or none which is displayed with score in their paddle, flag on left score justified right
+
+
+
+
+
+
+
+
