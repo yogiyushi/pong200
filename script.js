@@ -60,6 +60,10 @@ const state = {
     bottomInset: 10,
     worldLeft: 0,
     flipTopView: false
+  },
+  menuFlash: {
+    top: {},
+    bottom: {}
   }
 };
 
@@ -146,6 +150,10 @@ function makeId(prefix = 'p') {
 
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
+}
+
+function getMenuFlashAlpha(side, zoneIndex) {
+  return state.menuFlash[side]?.[zoneIndex] || 0;
 }
 
 function getCanvasSize() {
@@ -391,6 +399,8 @@ function updateBalls(delta) {
     const topHit = ball.y - ball.radius <= CANVAS_MENU_HEIGHT;
     const bottomHit = ball.y + ball.radius >= height - CANVAS_MENU_HEIGHT;
     if (topHit || bottomHit) {
+      const side = topHit ? 'top' : 'bottom';
+      state.menuFlash[side][zoneIndex] = 1;
       if (player) {
         eliminatePlayer(player);
         continue;
@@ -448,6 +458,14 @@ function updateGame(delta) {
   }
   updateBalls(delta);
   updateBots(delta);
+  for (const side of ['top', 'bottom']) {
+    for (const zoneIndex of Object.keys(state.menuFlash[side])) {
+      state.menuFlash[side][zoneIndex] = clamp(state.menuFlash[side][zoneIndex] - delta, 0, 1);
+      if (state.menuFlash[side][zoneIndex] <= 0) {
+        delete state.menuFlash[side][zoneIndex];
+      }
+    }
+  }
   if (performance.now() >= state.nextBallAt) {
     spawnBall();
     state.nextBallAt = performance.now() + state.config.spawnInterval;
@@ -475,9 +493,23 @@ function drawMissMarkers(cssWidth, cssHeight) {
   const gap = 6;
   const padding = 8;
 
-  ctx.fillStyle = 'rgba(255,255,255,0.04)';
+  ctx.fillStyle = 'rgb(2, 2, 2)';
   ctx.fillRect(0, 0, cssWidth, menuHeight);
   ctx.fillRect(0, cssHeight - menuHeight, cssWidth, menuHeight);
+
+  for (let zoneIndex = 0; zoneIndex < state.columnCount; zoneIndex += 1) {
+    const zoneLeft = zoneIndex * state.config.zoneWidth;
+    const topFlash = getMenuFlashAlpha('top', zoneIndex);
+    const bottomFlash = getMenuFlashAlpha('bottom', zoneIndex);
+    if (topFlash > 0) {
+      ctx.fillStyle = `rgba(255,255,255,${topFlash * 0.85})`;
+      ctx.fillRect(zoneLeft, 0, state.config.zoneWidth, menuHeight);
+    }
+    if (bottomFlash > 0) {
+      ctx.fillStyle = `rgba(255,255,255,${bottomFlash * 0.85})`;
+      ctx.fillRect(zoneLeft, cssHeight - menuHeight, state.config.zoneWidth, menuHeight);
+    }
+  }
 
   ctx.font = '9px ui-monospace, monospace';
   ctx.textBaseline = 'middle';
@@ -508,7 +540,7 @@ function drawMissMarkers(cssWidth, cssHeight) {
       }
 
       const displayName = player.isBot ? 'Bot' : player.name.slice(0, 8);
-      ctx.fillStyle = '#fff';
+      ctx.fillStyle = player.color || '#fff';
       ctx.textAlign = 'left';
       ctx.fillText(displayName, iconX + 12, y - 2);
       ctx.fillStyle = 'rgba(255,255,255,0.78)';
@@ -521,7 +553,7 @@ function drawMissMarkers(cssWidth, cssHeight) {
       ctx.font = '9px ui-monospace, monospace';
 
       for (let index = 0; index < 3; index += 1) {
-        const alpha = index < (player.misses || 0) ? 0.1 : 0.6;
+        const alpha = index < (player.misses || 0) ? 0.4 : 0.8;
         ctx.fillStyle = `rgba(255,255,255,${alpha})`;
         ctx.beginPath();
         ctx.arc(statsX - 40 - index * (radius * 2 + gap), y, radius, 0, Math.PI * 2);
@@ -559,11 +591,12 @@ function render() {
     ctx.translate(0, cssHeight);
     ctx.scale(1, -1);
   }
-
-  ctx.fillStyle = '#000';
+// maincolor background
+  ctx.fillStyle = '#212121';
   ctx.fillRect(cameraX, 0, cssWidth, cssHeight);
 
-  ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+  // maincolor court lines
+  ctx.strokeStyle = '#444444';
   ctx.lineWidth = 1;
   for (let index = 0; index <= state.columnCount; index++) {
     const x = index * state.config.zoneWidth;
@@ -573,7 +606,8 @@ function render() {
     ctx.stroke();
   }
 
-  ctx.fillStyle = 'rgba(255,255,255,0.04)';
+// maincolor court background
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
   for (let index = 0; index < state.columnCount; index++) {
     ctx.fillRect(index * state.config.zoneWidth, 0, state.config.zoneWidth, cssHeight);
   }
