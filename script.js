@@ -569,10 +569,7 @@ function drawMenuOverlay(cssWidth, cssHeight, viewScale, cameraX, worldHeight) {
       ctx.fillStyle = player.color || '#fff';
       ctx.textAlign = 'left';
       ctx.font = `${Math.max(4, 9 * menuScale)}px ui-monospace, monospace`;
-      ctx.fillText(displayName, iconX + iconSize + 6, y - 2);
-      ctx.fillStyle = 'rgba(255,255,255,0.78)';
-      ctx.font = `${Math.max(4, 8 * menuScale)}px ui-monospace, monospace`;
-      ctx.fillText(`Lvl:${(player.zoneIndex || 0) + 1}`, iconX + iconSize + 6, y + 6);
+      ctx.fillText(displayName, iconX + iconSize + 1, y);
 
       const statsX = zoneRight - padding;
       ctx.font = `${Math.max(4, 12 * menuScale)}px ui-monospace, monospace`;
