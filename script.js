@@ -290,7 +290,7 @@ function syncWorld() {
   });
   state.columnCount = Math.max(sideCounts.top, sideCounts.bottom);
   state.players.forEach((player) => {
-    if (previousZones.get(player.id) !== player.zoneIndex) {
+    if (!player.isBot && previousZones.get(player.id) !== player.zoneIndex) {
       player.barExpandStart = performance.now();
     }
     const zoneLeft = player.zoneIndex * state.config.zoneWidth;
@@ -328,9 +328,12 @@ function spawnBall() {
 }
 
 function getPlayerBarWidth(player) {
-  const elapsed = (performance.now() - (player.barExpandStart || 0)) / 1000;
   const fullWidth = state.config.zoneWidth;
   const defaultWidth = state.config.paddleLength;
+  if (player.isBot) {
+    return defaultWidth;
+  }
+  const elapsed = (performance.now() - (player.barExpandStart || 0)) / 1000;
   if (elapsed < 2) return fullWidth;
   if (elapsed < 6) {
     return lerp(fullWidth, defaultWidth, (elapsed - 2) / 4);
@@ -536,6 +539,16 @@ function drawMenuOverlay(cssWidth, cssHeight, viewScale, cameraX, worldHeight) {
       ctx.fillStyle = `rgba(255,255,255,${bottomFlash * 0.85})`;
       ctx.fillRect(zoneLeft, bottomY, state.config.zoneWidth * viewScale, menuHeight);
     }
+  }
+
+  for (let zoneIndex = 0; zoneIndex < state.columnCount; zoneIndex += 1) {
+    const zoneLeft = (zoneIndex * state.config.zoneWidth - cameraX) * viewScale;
+    const zoneCenterX = zoneLeft + (state.config.zoneWidth * viewScale) / 2;
+    const zoneCenterY = topY + (courtHeight / 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.05)';
+    ctx.textAlign = 'center';
+    ctx.font = '800 60px "Verdana Black", Verdana, sans-serif';
+    ctx.fillText(String(zoneIndex + 1), zoneCenterX, zoneCenterY);
   }
 
   ctx.font = '9px ui-monospace, monospace';
