@@ -263,13 +263,19 @@ function movePlayerToStartLevel(player) {
     state.players.splice(insertIndex, 0, player);
   }
   player.misses = 0;
+  player.score = 0;
+  player.paddleX = null;
+  player.targetX = null;
+  player.barWidth = null;
+  player.barExpandStart = performance.now();
+  player.lastHit = 0;
 }
 
 function restartGame(localOptions) {
   resetGame();
-  addBot();
-  addBot();
-  addBot();
+  for (let index = 0; index < 199; index += 1) {
+    addBot();
+  }
   addPlayer({
     isLocal: true,
     name: localOptions.name || 'You',
@@ -492,7 +498,7 @@ function updateGame(delta) {
     if (direction !== 0) {
       const zoneLeft = current.zoneIndex * state.config.zoneWidth;
       const zoneRight = zoneLeft + state.config.zoneWidth;
-      const speed = 48;
+      const speed = 96;
       current.paddleX = clamp(
         current.paddleX + direction * speed * delta,
         zoneLeft + 4,
@@ -534,10 +540,13 @@ function drawMenuOverlay(cssWidth, cssHeight, viewScale, cameraX, worldHeight) {
   const iconSize = PLAYER_ICON_SIZE * menuScale;
   const topY = (cssHeight - courtHeight) / 2;
   const bottomY = topY + courtHeight - menuHeight;
+  const flipOverlay = getCurrentPlayer() && getCurrentPlayer().side === 'top' && state.config.flipTopView;
+  const overlayTopY = flipOverlay ? bottomY : topY;
+  const overlayBottomY = flipOverlay ? topY : bottomY;
 
   ctx.fillStyle = 'rgb(2, 2, 2)';
-  ctx.fillRect(0, topY, cssWidth, menuHeight);
-  ctx.fillRect(0, bottomY, cssWidth, menuHeight);
+  ctx.fillRect(0, overlayTopY, cssWidth, menuHeight);
+  ctx.fillRect(0, overlayBottomY, cssWidth, menuHeight);
 
   for (let zoneIndex = 0; zoneIndex < state.columnCount; zoneIndex += 1) {
     const zoneLeft = (zoneIndex * state.config.zoneWidth - cameraX) * viewScale;
@@ -545,11 +554,11 @@ function drawMenuOverlay(cssWidth, cssHeight, viewScale, cameraX, worldHeight) {
     const bottomFlash = getMenuFlashAlpha('bottom', zoneIndex);
     if (topFlash > 0) {
       ctx.fillStyle = `rgba(255,255,255,${topFlash * 0.85})`;
-      ctx.fillRect(zoneLeft, topY, state.config.zoneWidth * viewScale, menuHeight);
+      ctx.fillRect(zoneLeft, overlayTopY, state.config.zoneWidth * viewScale, menuHeight);
     }
     if (bottomFlash > 0) {
       ctx.fillStyle = `rgba(255,255,255,${bottomFlash * 0.85})`;
-      ctx.fillRect(zoneLeft, bottomY, state.config.zoneWidth * viewScale, menuHeight);
+      ctx.fillRect(zoneLeft, overlayBottomY, state.config.zoneWidth * viewScale, menuHeight);
     }
   }
 
@@ -611,19 +620,29 @@ function drawMenuOverlay(cssWidth, cssHeight, viewScale, cameraX, worldHeight) {
       }
     };
 
-    drawHeader(topPlayer, topY + menuHeight / 2);
-    drawHeader(bottomPlayer, bottomY + menuHeight / 2);
+    drawHeader(topPlayer, overlayTopY + menuHeight / 2);
+    drawHeader(bottomPlayer, overlayBottomY + menuHeight / 2);
   }
 }
 
 function cameraXForCurrentPlayer(viewScale) {
   const cssWidth = canvas.clientWidth;
   const selected = getCurrentPlayer();
-  if (!selected) return 0;
-  const zoneCenter = selected.zoneIndex * state.config.zoneWidth + state.config.zoneWidth / 2;
+  if (!selected) return state.cameraX;
+
   const visibleWorldWidth = cssWidth / viewScale;
-  const halfWorld = visibleWorldWidth / 2;
-  return zoneCenter - halfWorld;
+  const zoneLeft = selected.zoneIndex * state.config.zoneWidth;
+  const zoneRight = zoneLeft + state.config.zoneWidth;
+  const viewLeft = state.cameraX;
+  const viewRight = viewLeft + visibleWorldWidth;
+  const zoneCenter = zoneLeft + state.config.zoneWidth / 2;
+  const targetCameraX = zoneCenter - visibleWorldWidth / 2;
+
+  if (zoneLeft >= viewLeft && zoneRight <= viewRight && state.cameraXTarget === state.cameraX) {
+    return state.cameraX;
+  }
+
+  return targetCameraX;
 }
 
 function render() {
@@ -922,9 +941,9 @@ function setup() {
   ballIntervalInput.step = String(BALL_INTERVAL_STEP_SEC);
 
   resizeCanvas();
-  addBot();
-  addBot();
-  addBot();
+  for (let index = 0; index < 199; index += 1) {
+    addBot();
+  }
   addPlayer({
     isLocal: true,
     name: playerNameInput.value.trim() || 'You',
