@@ -18,6 +18,7 @@ const minBallSpeedLabel = document.getElementById('minBallSpeedLabel');
 const maxBallSpeedInput = document.getElementById('maxBallSpeed');
 const maxBallSpeedLabel = document.getElementById('maxBallSpeedLabel');
 const maxBallsFactorInput = document.getElementById('maxBallsFactor');
+const maxBallsFactorLabel = document.getElementById('maxBallsFactorLabel');
 const optionsToggle = document.getElementById('optionsToggle');
 const optionsMenu = document.getElementById('optionsMenu');
 const menuFlipView = document.getElementById('menuFlipView');
@@ -59,6 +60,10 @@ const state = {
     bottomInset: 10,
     worldLeft: 0,
     flipTopView: false
+  },
+  sideMisses: {
+    top: 0,
+    bottom: 0
   }
 };
 
@@ -110,6 +115,7 @@ function applySettingsToInputs() {
   maxBallSpeedInput.value = String(state.config.maxBallSpeed);
   maxBallSpeedLabel.textContent = state.config.maxBallSpeed.toFixed(1);
   maxBallsFactorInput.value = String(state.config.maxBallsFactor);
+  maxBallsFactorLabel.textContent = String(state.config.maxBallsFactor);
   menuFlipView.checked = state.config.flipTopView;
 }
 
@@ -212,7 +218,25 @@ function resetGame() {
   state.players = [];
   state.balls = [];
   state.currentPlayerId = null;
+  state.sideMisses.top = 0;
+  state.sideMisses.bottom = 0;
   state.nextBallAt = performance.now() + state.config.spawnInterval;
+  updateUI();
+}
+
+function restartGame(localOptions) {
+  resetGame();
+  addBot();
+  addBot();
+  addBot();
+  addPlayer({
+    isLocal: true,
+    name: localOptions.name || 'You',
+    flag: localOptions.flag || '',
+    color: localOptions.color || '#fff',
+    side: localOptions.side
+  });
+  spawnBall();
   updateUI();
 }
 
@@ -299,15 +323,31 @@ function hitPaddle(player, ball) {
 
 function eliminatePlayer(player) {
   const isCurrent = player.id === state.currentPlayerId;
-  if (isCurrent) {
-    const again = window.confirm('You missed a ball. Play again?');
-    if (!again) {
+  if (player.side) {
+    state.sideMisses[player.side] = clamp(state.sideMisses[player.side] + 1, 0, 3);
+  }
+
+  const isLocalCurrent = isCurrent && player.isLocal;
+  if (isLocalCurrent && state.sideMisses[player.side] >= 3) {
+    const currentLevel = (player.zoneIndex || 0) + 1;
+    const highestLevel = Math.max(state.columnCount, currentLevel);
+    const again = window.confirm(
+      `Game over ${player.name}. Current Level ${currentLevel}. Highest Level ${highestLevel}. Play Again?`
+    );
+    state.players = state.players.filter((item) => item.id !== player.id);
+    syncWorld();
+    if (again) {
+      restartGame({
+        name: player.name,
+        flag: player.flag,
+        color: player.color,
+        side: player.side
+      });
+    } else {
       state.currentPlayerId = null;
-      state.players = state.players.filter((item) => item.id !== player.id);
-      syncWorld();
       updateUI();
-      return;
     }
+    return;
   }
 
   state.players = state.players.filter((item) => item.id !== player.id);
@@ -315,7 +355,8 @@ function eliminatePlayer(player) {
   const nextPlayer = createPlayer({
     name: player.name,
     flag: player.flag,
-    side: chooseSide(),
+    color: player.color,
+    side: isCurrent ? player.side : chooseSide(),
     isBot: player.isBot,
     isLocal: isCurrent
   });
@@ -448,6 +489,27 @@ function getViewScale() {
   return Math.max(cssWidth / state.worldWidth, minScale);
 }
 
+function drawMissMarkers(cssWidth, cssHeight) {
+  const radius = 5;
+  const gap = 10;
+  const totalWidth = radius * 2 * 3 + gap * 2;
+  const startX = 14;
+  const drawSide = (y, side) => {
+    for (let index = 0; index < 3; index += 1) {
+      const alpha = index < state.sideMisses[side] ? 0.1 : 0.6;
+      ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+      ctx.beginPath();
+      ctx.arc(startX + index * (radius * 2 + gap) + radius, y, radius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  };
+  ctx.fillStyle = 'rgba(255,255,255,0.04)';
+  ctx.fillRect(0, 0, cssWidth, 16);
+  ctx.fillRect(0, cssHeight - 16, cssWidth, 16);
+  drawSide(8, 'top');
+  drawSide(cssHeight - 8, 'bottom');
+}
+
 function cameraXForCurrentPlayer() {
   const cssWidth = canvas.clientWidth;
   const selected = getCurrentPlayer();
@@ -535,6 +597,7 @@ function render() {
   }
 
   ctx.restore();
+  drawMissMarkers(cssWidth, cssHeight);
 }
 
 function refreshUI() {
@@ -654,7 +717,8 @@ function attachEvents() {
   });
 
   maxBallsFactorInput.addEventListener('input', () => {
-    state.config.maxBallsFactor = clamp(Number(maxBallsFactorInput.value), 1, 4);
+    state.config.maxBallsFactor = clamp(Number(maxBallsFactorInput.value), 1, 100);
+    maxBallsFactorLabel.textContent = String(state.config.maxBallsFactor);
     saveSettings();
   });
 
@@ -753,7 +817,12 @@ function setup() {
   addBot();
   addBot();
   addBot();
-  addPlayer({ isLocal: true, name: 'You', flag: '' });
+  addPlayer({
+    isLocal: true,
+    name: playerNameInput.value.trim() || 'You',
+    flag: playerFlagInput.value,
+    color: playerColorInput.value
+  });
   spawnBall();
   updateUI();
   canvas.focus();

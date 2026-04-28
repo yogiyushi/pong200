@@ -6,6 +6,14 @@
 }
 * {
   box-sizing: border-box;
+  user-select: none;
+}
+*::-moz-focus-inner {
+  border: 0;
+}
+*:focus {
+  outline: none;
+  box-shadow: none;
 }
 html,
 body {
