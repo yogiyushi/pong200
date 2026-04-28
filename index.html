@@ -47,7 +47,6 @@
               Flip top-player view
             </label>
           </div>
-          <div class="menu-header">Join game</div>
           <div class="menu-item">
             <label for="playerName">Name</label>
             <input id="playerName" type="text" value="You" maxlength="12" />
@@ -60,7 +59,6 @@
             <label for="playerColor">Player bar color</label>
             <input id="playerColor" type="color" value="#ffffff" />
           </div>
-          <button id="joinButton" class="menu-button">Join game</button>
           <button id="addBotButton" class="menu-button">+ Add bot</button>
           <button id="resetButton" class="menu-button">Reset game</button>
           <div class="menu-header">Players</div>
@@ -68,12 +66,15 @@
         </div>
       </div>
     </header>
+    <div class="info-bar">Use the options menu in the top right for game settings and player controls.</div>
+    <div class="join-bar">
+      <button id="joinButton" class="join-button">Join</button>
+    </div>
     <main class="main-grid">
       <section class="game-panel">
         <canvas id="pongCanvas" tabindex="0" width="960" height="420"></canvas>
       </section>
     </main>
-    <div class="info-bar">Use the options menu in the top right for game settings and player controls.</div>
     <div class="canvas-info-bar">
       <span>Players: <strong id="canvasPlayerCount">0</strong></span>
       <span>Balls: <strong id="canvasBallCount">0</strong></span>
