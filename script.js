@@ -64,6 +64,10 @@ const state = {
     zoomLevel: 1,
     flipTopView: false
   },
+  cameraX: 0,
+  cameraXTarget: 0,
+  cameraXStart: 0,
+  cameraXStartTime: performance.now(),
   menuFlash: {
     top: {},
     bottom: {}
@@ -155,6 +159,10 @@ function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
 }
 
+function lerp(start, end, t) {
+  return start + (end - start) * t;
+}
+
 function getMenuFlashAlpha(side, zoneIndex) {
   return state.menuFlash[side]?.[zoneIndex] || 0;
 }
@@ -206,7 +214,8 @@ function createPlayer({ name, flag, color, side, isBot = false, isLocal = false 
     targetX: null,
     isBot,
     isLocal,
-    active: true
+    active: true,
+    barExpandStart: performance.now()
   };
 }
 
@@ -273,6 +282,7 @@ function restartGame(localOptions) {
 }
 
 function syncWorld() {
+  const previousZones = new Map(state.players.map((player) => [player.id, player.zoneIndex]));
   const sideCounts = { top: 0, bottom: 0 };
   state.players.forEach((player) => {
     player.zoneIndex = sideCounts[player.side];
@@ -280,13 +290,17 @@ function syncWorld() {
   });
   state.columnCount = Math.max(sideCounts.top, sideCounts.bottom);
   state.players.forEach((player) => {
+    if (previousZones.get(player.id) !== player.zoneIndex) {
+      player.barExpandStart = performance.now();
+    }
     const zoneLeft = player.zoneIndex * state.config.zoneWidth;
     const zoneRight = zoneLeft + state.config.zoneWidth;
-    const defaultX = zoneLeft + (state.config.zoneWidth - state.config.paddleLength) / 2;
+    const width = getPlayerBarWidth(player);
+    const defaultX = zoneLeft + (state.config.zoneWidth - width) / 2;
     player.paddleX = clamp(
       player.paddleX == null ? defaultX : player.paddleX,
       zoneLeft + 4,
-      zoneRight - state.config.paddleLength - 4
+      zoneRight - width - 4
     );
   });
   state.worldWidth = state.columnCount * state.config.zoneWidth;
@@ -313,14 +327,26 @@ function spawnBall() {
   updateUI();
 }
 
+function getPlayerBarWidth(player) {
+  const elapsed = (performance.now() - (player.barExpandStart || 0)) / 1000;
+  const fullWidth = state.config.zoneWidth;
+  const defaultWidth = state.config.paddleLength;
+  if (elapsed < 2) return fullWidth;
+  if (elapsed < 6) {
+    return lerp(fullWidth, defaultWidth, (elapsed - 2) / 4);
+  }
+  return defaultWidth;
+}
+
 function playerPaddleBounds(player) {
   const { height } = getCanvasSize();
   const zoneLeft = player.zoneIndex * state.config.zoneWidth;
   const zoneRight = zoneLeft + state.config.zoneWidth;
+  const width = getPlayerBarWidth(player);
   const x = clamp(
     player.paddleX,
     zoneLeft + 4,
-    zoneRight - state.config.paddleLength - 4
+    zoneRight - width - 4
   );
   const y = player.side === 'bottom'
     ? height - state.config.paddleHeight - CANVAS_MENU_HEIGHT - 1
@@ -328,7 +354,7 @@ function playerPaddleBounds(player) {
   return {
     x,
     y,
-    width: state.config.paddleLength,
+    width,
     height: state.config.paddleHeight
   };
 }
@@ -590,12 +616,21 @@ function render() {
   const worldHeight = getCanvasHeight();
   ctx.clearRect(0, 0, cssWidth, cssHeight);
   const viewScale = getViewScale();
-  const cameraX = cameraXForCurrentPlayer(viewScale);
+  const targetCameraX = cameraXForCurrentPlayer(viewScale);
+  const now = performance.now();
+  if (targetCameraX !== state.cameraXTarget) {
+    state.cameraXTarget = targetCameraX;
+    state.cameraXStart = state.cameraX;
+    state.cameraXStartTime = now;
+  }
+  const moveElapsed = now - state.cameraXStartTime;
+  const progress = clamp(moveElapsed / 2000, 0, 1);
+  state.cameraX = lerp(state.cameraXStart, state.cameraXTarget, progress);
   const yOffset = (cssHeight - worldHeight * viewScale) / 2;
   ctx.save();
   ctx.translate(0, yOffset);
   ctx.scale(viewScale, viewScale);
-  ctx.translate(-cameraX, 0);
+  ctx.translate(-state.cameraX, 0);
 
   const current = getCurrentPlayer();
   if (current && current.side === 'top' && state.config.flipTopView) {
@@ -653,7 +688,7 @@ function render() {
   }
 
   ctx.restore();
-  drawMenuOverlay(cssWidth, cssHeight, viewScale, cameraX, worldHeight);
+  drawMenuOverlay(cssWidth, cssHeight, viewScale, state.cameraX, worldHeight);
 }
 
 function refreshUI() {
