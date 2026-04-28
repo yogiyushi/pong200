@@ -136,7 +136,8 @@ select {
   display: grid;
   grid-template-columns: 1fr;
   gap: 18px;
-  padding: 18px;
+  padding-bottom: 18px;
+    padding-top: 18px;
 }
 .game-panel {
   position: relative;
@@ -153,6 +154,28 @@ canvas {
   height: auto;
   display: block;
   background: #010101;
+}
+.canvas-info-bar {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 18px;
+  position: relative;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100vw;
+  padding: 0 14px;
+  margin-top: 6px;
+  height: 16px;
+  background: rgba(255, 255, 255, 0);
+  border-top: 1px solid rgba(255, 255, 255, 0);
+  color: rgba(116, 116, 116, 0.78);
+  font-size: 0.76rem;
+  text-align: right;
+  min-height: 16px;
+}
+.canvas-info-bar strong {
+  font-weight: 700;
 }
 .info-bar {
   display: block;

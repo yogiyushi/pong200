@@ -10,10 +10,6 @@
   <div class="app-shell">
     <header class="top-bar">
       <div class="brand">Pong200</div>
-      <div class="status">
-        <span>Players: <strong id="playerCount">0</strong></span>
-        <span>Balls: <strong id="ballCount">0</strong></span>
-      </div>
       <div class="top-menu">
         <button id="optionsToggle" class="icon-button" aria-label="Options">
           <img src="icons/density_medium_24dp_E3E3E3_FILL0_wght400_GRAD0_opsz24.svg" alt="Options" />
@@ -72,12 +68,16 @@
         </div>
       </div>
     </header>
-    <div class="info-bar">Use the options menu in the top right for game settings and player controls.</div>
     <main class="main-grid">
       <section class="game-panel">
         <canvas id="pongCanvas" tabindex="0" width="960" height="420"></canvas>
       </section>
     </main>
+    <div class="info-bar">Use the options menu in the top right for game settings and player controls.</div>
+    <div class="canvas-info-bar">
+      <span>Players: <strong id="canvasPlayerCount">0</strong></span>
+      <span>Balls: <strong id="canvasBallCount">0</strong></span>
+    </div>
   </div>
 
   <script src="script.js"></script>

@@ -2,6 +2,8 @@ const canvas = document.getElementById('pongCanvas');
 const ctx = canvas.getContext('2d');
 const playerCountEl = document.getElementById('playerCount');
 const ballCountEl = document.getElementById('ballCount');
+const canvasPlayerCountEl = document.getElementById('canvasPlayerCount');
+const canvasBallCountEl = document.getElementById('canvasBallCount');
 const playerListEl = document.getElementById('playerList');
 const playerNameInput = document.getElementById('playerName');
 const playerFlagInput = document.getElementById('playerFlag');
@@ -646,8 +648,8 @@ function render() {
 }
 
 function refreshUI() {
-  playerCountEl.textContent = state.players.length;
-  ballCountEl.textContent = state.balls.length;
+  if (playerCountEl) playerCountEl.textContent = state.players.length;
+  if (ballCountEl) ballCountEl.textContent = state.balls.length;
   playerListEl.innerHTML = '';
   for (const player of state.players) {
     const item = document.createElement('div');
@@ -677,8 +679,10 @@ function updateUI() {
     const localPlayer = state.players.find((player) => player.isLocal);
     state.currentPlayerId = localPlayer ? localPlayer.id : state.players[0].id;
   }
-  playerCountEl.textContent = state.players.length;
-  ballCountEl.textContent = state.balls.length;
+  if (playerCountEl) playerCountEl.textContent = state.players.length;
+  if (ballCountEl) ballCountEl.textContent = state.balls.length;
+  if (canvasPlayerCountEl) canvasPlayerCountEl.textContent = state.players.length;
+  if (canvasBallCountEl) canvasBallCountEl.textContent = state.balls.length;
   refreshUI();
   resizeCanvas();
 }
