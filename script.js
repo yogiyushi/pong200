@@ -346,11 +346,23 @@ function playerPaddleBounds(player) {
   const zoneLeft = player.zoneIndex * state.config.zoneWidth;
   const zoneRight = zoneLeft + state.config.zoneWidth;
   const width = getPlayerBarWidth(player);
+
+  if (player.paddleX == null) {
+    player.paddleX = zoneLeft + (state.config.zoneWidth - width) / 2;
+  } else {
+    const previousWidth = player.barWidth || width;
+    const centerX = player.paddleX + previousWidth / 2;
+    player.paddleX = centerX - width / 2;
+  }
+
   const x = clamp(
     player.paddleX,
     zoneLeft + 4,
     zoneRight - width - 4
   );
+  player.paddleX = x;
+  player.barWidth = width;
+
   const y = player.side === 'bottom'
     ? height - state.config.paddleHeight - CANVAS_MENU_HEIGHT - 1
     : CANVAS_MENU_HEIGHT + 1;
