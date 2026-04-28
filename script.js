@@ -179,8 +179,8 @@ function chooseSide() {
 function createPlayer({ name, flag, color, side, isBot = false, isLocal = false }) {
   const { height } = getCanvasSize();
   const baseY = side === 'bottom'
-    ? height - state.config.bottomInset - state.config.paddleHeight - CANVAS_MENU_HEIGHT
-    : state.config.topInset + CANVAS_MENU_HEIGHT;
+    ? height - state.config.paddleHeight - CANVAS_MENU_HEIGHT - 1
+    : CANVAS_MENU_HEIGHT + 1;
   return {
     id: makeId(isLocal ? 'me' : isBot ? 'bot' : 'pl'),
     name: name || (isBot ? `Bot-${Math.floor(Math.random() * 1000)}` : 'Player'),
@@ -227,6 +227,22 @@ function resetGame() {
   state.currentPlayerId = null;
   state.nextBallAt = performance.now() + state.config.spawnInterval;
   updateUI();
+}
+
+function movePlayerToStartLevel(player) {
+  const side = player.side;
+  if (!side) return;
+  const index = state.players.findIndex((item) => item.id === player.id);
+  if (index !== -1) {
+    state.players.splice(index, 1);
+  }
+  const insertIndex = state.players.findIndex((item) => item.side === side);
+  if (insertIndex === -1) {
+    state.players.push(player);
+  } else {
+    state.players.splice(insertIndex, 0, player);
+  }
+  player.misses = 0;
 }
 
 function restartGame(localOptions) {
@@ -296,8 +312,8 @@ function playerPaddleBounds(player) {
     zoneRight - state.config.paddleLength - 4
   );
   const y = player.side === 'bottom'
-    ? height - state.config.bottomInset - state.config.paddleHeight - CANVAS_MENU_HEIGHT
-    : state.config.topInset + CANVAS_MENU_HEIGHT;
+    ? height - state.config.paddleHeight - CANVAS_MENU_HEIGHT - 1
+    : CANVAS_MENU_HEIGHT + 1;
   return {
     x,
     y,
@@ -327,38 +343,14 @@ function hitPaddle(player, ball) {
 }
 
 function eliminatePlayer(player) {
-  const isCurrent = player.id === state.currentPlayerId;
   player.misses = clamp((player.misses || 0) + 1, 0, 3);
   if (player.misses < 3) {
     updateUI();
     return;
   }
 
-  const currentLevel = (player.zoneIndex || 0) + 1;
-  const highestLevel = Math.max(state.columnCount, currentLevel);
-  const isLocalCurrent = isCurrent && player.isLocal;
-
-  state.players = state.players.filter((item) => item.id !== player.id);
+  movePlayerToStartLevel(player);
   syncWorld();
-
-  if (isLocalCurrent) {
-    const again = window.confirm(
-      `Game over ${player.name}. Current Level ${currentLevel}. Highest Level ${highestLevel}. Play Again?`
-    );
-    if (again) {
-      restartGame({
-        name: player.name,
-        flag: player.flag,
-        color: player.color,
-        side: player.side
-      });
-      return;
-    }
-    state.currentPlayerId = null;
-    updateUI();
-    return;
-  }
-
   updateUI();
 }
 
@@ -372,6 +364,12 @@ function updateBalls(delta) {
     if (ball.x - ball.radius <= 0) {
       ball.x = ball.radius;
       ball.vx = Math.abs(ball.vx);
+    }
+
+    const worldRight = state.worldWidth;
+    if (ball.x + ball.radius >= worldRight) {
+      ball.x = worldRight - ball.radius;
+      ball.vx = -Math.abs(ball.vx);
     }
 
     const zoneIndex = Math.max(0, Math.min(state.columnCount - 1, Math.floor(ball.x / state.config.zoneWidth)));
@@ -390,21 +388,12 @@ function updateBalls(delta) {
     }
 
     const { height } = getCanvasSize();
-    const topHit = ball.y - ball.radius <= 0;
-    const bottomHit = ball.y + ball.radius >= height;
+    const topHit = ball.y - ball.radius <= CANVAS_MENU_HEIGHT;
+    const bottomHit = ball.y + ball.radius >= height - CANVAS_MENU_HEIGHT;
     if (topHit || bottomHit) {
-      if (ball.x < leftWallLimit) {
-        if (topHit) {
-          ball.y = ball.radius;
-        } else {
-          ball.y = height - ball.radius;
-        }
-        ball.vy = -ball.vy;
-      } else {
-        if (player) {
-          eliminatePlayer(player);
-          continue;
-        }
+      if (player) {
+        eliminatePlayer(player);
+        continue;
       }
     }
 
