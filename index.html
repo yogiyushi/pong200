@@ -17,11 +17,6 @@
         <div id="optionsMenu" class="options-menu hidden" role="menu" aria-hidden="true">
           <div class="menu-header">Options</div>
           <div class="menu-item">
-            <label for="zoneWidth">Zone width</label>
-            <input id="zoneWidth" type="range" min="150" max="320" value="200" />
-            <div class="menu-note"><span id="zoneWidthLabel">200</span> px</div>
-          </div>
-          <div class="menu-item">
             <label for="ballInterval">Ball interval</label>
             <input id="ballInterval" type="range" min="2000" max="8000" step="500" value="5000" />
             <div class="menu-note"><span id="ballIntervalLabel">5s</span></div>
@@ -72,12 +67,19 @@
     </div>
     <main class="main-grid">
       <section class="game-panel">
-        <canvas id="pongCanvas" tabindex="0" width="960" height="420"></canvas>
+        <canvas id="pongCanvas" tabindex="0" width="960" height="450"></canvas>
       </section>
     </main>
-    <div class="canvas-info-bar">
-      <span>Players: <strong id="canvasPlayerCount">0</strong></span>
-      <span>Balls: <strong id="canvasBallCount">0</strong></span>
+    <div class="bottom-panel">
+      <div class="zoom-bar">
+        <label for="cameraZoom">Zoom</label>
+        <input id="cameraZoom" type="range" min="0.1" max="1" step="0.01" value="1" />
+        <span id="cameraZoomLabel">100%</span>
+      </div>
+      <div class="canvas-info-bar">
+        <span>Players: <strong id="canvasPlayerCount">0</strong></span>
+        <span>Balls: <strong id="canvasBallCount">0</strong></span>
+      </div>
     </div>
   </div>
 

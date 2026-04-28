@@ -152,27 +152,40 @@ select {
 /* maincolor canvas background */
 canvas {
   width: 100%;
-  height: auto;
+  height: 450px;
   display: block;
   background: #010101;
+}
+.bottom-panel {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px 0;
+  gap: 18px;
+}
+.zoom-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.zoom-bar label,
+.zoom-bar span {
+  font-size: 0.82rem;
+  color: rgba(201, 201, 201, 0.88);
+}
+.zoom-bar input[type="range"] {
+  width: 220px;
 }
 .canvas-info-bar {
   display: flex;
   justify-content: flex-end;
   align-items: center;
   gap: 18px;
-  position: relative;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 100vw;
-  padding: 0px 14px;
-  margin-top: 6px;
-  height: 16px;
-  background: rgba(255, 255, 255, 0);
-  border-top: 1px solid rgba(255, 255, 255, 0);
-  color: rgba(116, 116, 116, 0.78);
+  padding: 0;
+  color: rgba(201, 201, 201, 0.88);
   font-size: 0.76rem;
   text-align: right;
+}
   min-height: 16px;
 }
 .canvas-info-bar strong {

@@ -11,8 +11,8 @@ const playerColorInput = document.getElementById('playerColor');
 const joinButton = document.getElementById('joinButton');
 const addBotButton = document.getElementById('addBotButton');
 const resetButton = document.getElementById('resetButton');
-const zoneWidthInput = document.getElementById('zoneWidth');
-const zoneWidthLabel = document.getElementById('zoneWidthLabel');
+const cameraZoomInput = document.getElementById('cameraZoom');
+const cameraZoomLabel = document.getElementById('cameraZoomLabel');
 const ballIntervalInput = document.getElementById('ballInterval');
 const ballIntervalLabel = document.getElementById('ballIntervalLabel');
 const minBallSpeedInput = document.getElementById('minBallSpeed');
@@ -61,6 +61,7 @@ const state = {
     topInset: 10,
     bottomInset: 10,
     worldLeft: 0,
+    zoomLevel: 1,
     flipTopView: false
   },
   menuFlash: {
@@ -84,7 +85,7 @@ PLAYER_ICONS.bot.src = 'icons/computer_24dp_E3E3E3_FILL0_wght400_GRAD0_opsz24.sv
 
 function saveSettings() {
   const settings = {
-    zoneWidth: Number(zoneWidthInput.value),
+    cameraZoom: Number(cameraZoomInput.value),
     spawnIntervalSec: Number(ballIntervalInput.value),
     minBallSpeed: Number(minBallSpeedInput.value),
     maxBallSpeed: Number(maxBallSpeedInput.value),
@@ -102,7 +103,7 @@ function loadSettings() {
   if (!raw) return;
   try {
     const settings = JSON.parse(raw);
-    if (settings.zoneWidth != null) state.config.zoneWidth = Number(settings.zoneWidth);
+    if (settings.cameraZoom != null) state.config.zoomLevel = Number(settings.cameraZoom);
     if (settings.spawnIntervalSec != null) state.config.spawnInterval = Math.round(Number(settings.spawnIntervalSec) * 1000);
     if (settings.minBallSpeed != null) state.config.minBallSpeed = Number(settings.minBallSpeed);
     if (settings.maxBallSpeed != null) state.config.maxBallSpeed = Number(settings.maxBallSpeed);
@@ -117,8 +118,8 @@ function loadSettings() {
 }
 
 function applySettingsToInputs() {
-  zoneWidthInput.value = String(state.config.zoneWidth);
-  zoneWidthLabel.textContent = String(state.config.zoneWidth);
+  cameraZoomInput.value = String(state.config.zoomLevel);
+  cameraZoomLabel.textContent = `${Math.round(state.config.zoomLevel * 100)}%`;
   setBallIntervalSeconds(state.config.spawnInterval / 1000);
   minBallSpeedInput.value = String(state.config.minBallSpeed);
   minBallSpeedLabel.textContent = state.config.minBallSpeed.toFixed(1);
@@ -475,30 +476,27 @@ function updateGame(delta) {
 }
 
 function getCanvasHeight() {
-  const visibleZoneWidth = state.config.zoneWidth * getViewScale();
-  const height = Math.round(visibleZoneWidth * 3);
-  return clamp(height, 450, 600);
+  return 450;
 }
 
 function getViewScale() {
-  const cssWidth = canvas.clientWidth;
-  const minScale = 150 / state.config.zoneWidth;
-  if (state.worldWidth <= cssWidth) {
-    return 1;
-  }
-  return Math.max(cssWidth / state.worldWidth, minScale);
+  return clamp(state.config.zoomLevel, 0.1, 1);
 }
 
-function drawMissMarkers(cssWidth, cssHeight, viewScale, cameraX) {
-  const menuHeight = CANVAS_MENU_HEIGHT;
-  const scaledZoneWidth = state.config.zoneWidth * viewScale;
-  const radius = 4;
-  const gap = 6;
-  const padding = 8;
+function drawMenuOverlay(cssWidth, cssHeight, viewScale, cameraX, worldHeight) {
+  const menuScale = viewScale >= 0.7 ? 1 : viewScale / 0.7;
+  const menuHeight = CANVAS_MENU_HEIGHT * menuScale;
+  const courtHeight = worldHeight * viewScale;
+  const radius = 4 * menuScale;
+  const gap = 6 * menuScale;
+  const padding = 8 * menuScale;
+  const iconSize = PLAYER_ICON_SIZE * menuScale;
+  const topY = (cssHeight - courtHeight) / 2;
+  const bottomY = topY + courtHeight - menuHeight;
 
   ctx.fillStyle = 'rgb(2, 2, 2)';
-  ctx.fillRect(0, 0, cssWidth, menuHeight);
-  ctx.fillRect(0, cssHeight - menuHeight, cssWidth, menuHeight);
+  ctx.fillRect(0, topY, cssWidth, menuHeight);
+  ctx.fillRect(0, bottomY, cssWidth, menuHeight);
 
   for (let zoneIndex = 0; zoneIndex < state.columnCount; zoneIndex += 1) {
     const zoneLeft = (zoneIndex * state.config.zoneWidth - cameraX) * viewScale;
@@ -506,11 +504,11 @@ function drawMissMarkers(cssWidth, cssHeight, viewScale, cameraX) {
     const bottomFlash = getMenuFlashAlpha('bottom', zoneIndex);
     if (topFlash > 0) {
       ctx.fillStyle = `rgba(255,255,255,${topFlash * 0.85})`;
-      ctx.fillRect(zoneLeft, 0, scaledZoneWidth, menuHeight);
+      ctx.fillRect(zoneLeft, topY, state.config.zoneWidth * viewScale, menuHeight);
     }
     if (bottomFlash > 0) {
       ctx.fillStyle = `rgba(255,255,255,${bottomFlash * 0.85})`;
-      ctx.fillRect(zoneLeft, cssHeight - menuHeight, scaledZoneWidth, menuHeight);
+      ctx.fillRect(zoneLeft, bottomY, state.config.zoneWidth * viewScale, menuHeight);
     }
   }
 
@@ -519,7 +517,7 @@ function drawMissMarkers(cssWidth, cssHeight, viewScale, cameraX) {
 
   for (let zoneIndex = 0; zoneIndex < state.columnCount; zoneIndex += 1) {
     const zoneLeft = (zoneIndex * state.config.zoneWidth - cameraX) * viewScale;
-    const zoneRight = zoneLeft + scaledZoneWidth;
+    const zoneRight = zoneLeft + state.config.zoneWidth * viewScale;
     const topPlayer = getZonePlayer(zoneIndex, 'top');
     const bottomPlayer = getZonePlayer(zoneIndex, 'bottom');
 
@@ -527,17 +525,16 @@ function drawMissMarkers(cssWidth, cssHeight, viewScale, cameraX) {
       if (!player) return;
       const iconX = zoneLeft + padding;
       const iconY = y;
-
       const icon = player.isBot ? PLAYER_ICONS.bot : PLAYER_ICONS.human;
       if (icon.complete && icon.naturalWidth) {
-        ctx.drawImage(icon, iconX - PLAYER_ICON_SIZE / 2, iconY - PLAYER_ICON_SIZE / 2 - 1, PLAYER_ICON_SIZE, PLAYER_ICON_SIZE);
+        ctx.drawImage(icon, iconX - iconSize / 2, iconY - iconSize / 2 - 1, iconSize, iconSize);
       } else {
         ctx.fillStyle = '#fff';
         if (player.isBot) {
-          ctx.fillRect(iconX - PLAYER_ICON_SIZE / 2, iconY - PLAYER_ICON_SIZE / 2 - 1, PLAYER_ICON_SIZE, PLAYER_ICON_SIZE);
+          ctx.fillRect(iconX - iconSize / 2, iconY - iconSize / 2 - 1, iconSize, iconSize);
         } else {
           ctx.beginPath();
-          ctx.arc(iconX, iconY - 1, PLAYER_ICON_SIZE / 2, 0, Math.PI * 2);
+          ctx.arc(iconX, iconY - 1, iconSize / 2, 0, Math.PI * 2);
           ctx.fill();
         }
       }
@@ -545,58 +542,65 @@ function drawMissMarkers(cssWidth, cssHeight, viewScale, cameraX) {
       const displayName = player.isBot ? 'Bot' : player.name.slice(0, 8);
       ctx.fillStyle = player.color || '#fff';
       ctx.textAlign = 'left';
-      ctx.fillText(displayName, iconX + 12, y - 2);
+      ctx.font = `${Math.max(4, 9 * menuScale)}px ui-monospace, monospace`;
+      ctx.fillText(displayName, iconX + iconSize + 6, y - 2);
       ctx.fillStyle = 'rgba(255,255,255,0.78)';
-      ctx.fillText(`Lvl:${(player.zoneIndex || 0) + 1}`, iconX + 12, y + 5);
+      ctx.font = `${Math.max(4, 8 * menuScale)}px ui-monospace, monospace`;
+      ctx.fillText(`Lvl:${(player.zoneIndex || 0) + 1}`, iconX + iconSize + 6, y + 6);
 
       const statsX = zoneRight - padding;
-      ctx.font = '12px ui-monospace, monospace';
+      ctx.font = `${Math.max(4, 12 * menuScale)}px ui-monospace, monospace`;
       ctx.textAlign = 'right';
       ctx.fillText(player.score, statsX, y);
-      ctx.font = '9px ui-monospace, monospace';
+      ctx.font = `${Math.max(8, 9 * menuScale)}px ui-monospace, monospace`;
 
       for (let index = 0; index < 3; index += 1) {
         const alpha = index < (player.misses || 0) ? 0.4 : 0.8;
         ctx.fillStyle = `rgba(255,255,255,${alpha})`;
         ctx.beginPath();
-        ctx.arc(statsX - 40 - index * (radius * 2 + gap), y, radius, 0, Math.PI * 2);
+        ctx.arc(statsX - 40 * menuScale - index * (radius * 2 + gap), y, radius, 0, Math.PI * 2);
         ctx.fill();
       }
     };
 
-    drawHeader(topPlayer, menuHeight / 2);
-    drawHeader(bottomPlayer, cssHeight - menuHeight / 2);
+    drawHeader(topPlayer, topY + menuHeight / 2);
+    drawHeader(bottomPlayer, bottomY + menuHeight / 2);
   }
 }
 
-function cameraXForCurrentPlayer() {
+function cameraXForCurrentPlayer(viewScale) {
   const cssWidth = canvas.clientWidth;
   const selected = getCurrentPlayer();
-  const baseX = selected ? selected.zoneIndex * state.config.zoneWidth : 0;
-  const halfWidth = cssWidth * 0.42;
+  if (!selected) return 0;
+  const zoneCenter = selected.zoneIndex * state.config.zoneWidth + state.config.zoneWidth / 2;
+  const visibleWorldWidth = cssWidth / viewScale;
+  const halfWorld = visibleWorldWidth / 2;
   const minX = 0;
-  const maxX = Math.max(0, state.worldWidth - cssWidth);
-  return clamp(baseX - halfWidth, minX, maxX);
+  const maxX = Math.max(0, state.worldWidth - visibleWorldWidth);
+  return clamp(zoneCenter - halfWorld, minX, maxX);
 }
 
 function render() {
   const cssWidth = canvas.clientWidth;
   const cssHeight = canvas.clientHeight;
+  const worldHeight = getCanvasHeight();
   ctx.clearRect(0, 0, cssWidth, cssHeight);
   const viewScale = getViewScale();
-  const cameraX = viewScale < 1 ? 0 : cameraXForCurrentPlayer();
+  const cameraX = cameraXForCurrentPlayer(viewScale);
+  const yOffset = (cssHeight - worldHeight * viewScale) / 2;
   ctx.save();
+  ctx.translate(0, yOffset);
+  ctx.scale(viewScale, viewScale);
   ctx.translate(-cameraX, 0);
-  ctx.scale(viewScale, 1);
 
   const current = getCurrentPlayer();
   if (current && current.side === 'top' && state.config.flipTopView) {
-    ctx.translate(0, cssHeight);
+    ctx.translate(0, worldHeight);
     ctx.scale(1, -1);
   }
 // maincolor background
   ctx.fillStyle = '#212121';
-  ctx.fillRect(cameraX, 0, cssWidth, cssHeight);
+  ctx.fillRect(0, 0, state.worldWidth, worldHeight);
 
   // maincolor court lines
   ctx.strokeStyle = '#444444';
@@ -605,14 +609,14 @@ function render() {
     const x = index * state.config.zoneWidth;
     ctx.beginPath();
     ctx.moveTo(x, 0);
-    ctx.lineTo(x, cssHeight);
+    ctx.lineTo(x, worldHeight);
     ctx.stroke();
   }
 
 // maincolor court background
   ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
   for (let index = 0; index < state.columnCount; index++) {
-    ctx.fillRect(index * state.config.zoneWidth, 0, state.config.zoneWidth, cssHeight);
+    ctx.fillRect(index * state.config.zoneWidth, 0, state.config.zoneWidth, worldHeight);
   }
 
   for (const player of state.players) {
@@ -622,7 +626,7 @@ function render() {
     const bgAlpha = player.side === 'bottom' ? 0.06 : 0.04;
 
     ctx.fillStyle = `rgba(255,255,255,${bgAlpha})`;
-    ctx.fillRect(zoneLeft, 0, state.config.zoneWidth, cssHeight);
+    ctx.fillRect(zoneLeft, 0, state.config.zoneWidth, worldHeight);
 
     const paddle = playerPaddleBounds(player);
     const isLocal = player.isLocal;
@@ -645,7 +649,7 @@ function render() {
   }
 
   ctx.restore();
-  drawMissMarkers(cssWidth, cssHeight, viewScale, cameraX);
+  drawMenuOverlay(cssWidth, cssHeight, viewScale, cameraX, worldHeight);
 }
 
 function refreshUI() {
@@ -722,11 +726,10 @@ function attachEvents() {
   playerNameInput.addEventListener('input', saveSettings);
   playerFlagInput.addEventListener('change', saveSettings);
 
-  zoneWidthInput.addEventListener('input', () => {
-    state.config.zoneWidth = Number(zoneWidthInput.value);
-    zoneWidthLabel.textContent = zoneWidthInput.value;
-    syncWorld();
-    resizeCanvas();
+  cameraZoomInput.addEventListener('input', () => {
+    state.config.zoomLevel = Number(cameraZoomInput.value);
+    cameraZoomLabel.textContent = `${Math.round(state.config.zoomLevel * 100)}%`;
+    render();
     saveSettings();
   });
 
