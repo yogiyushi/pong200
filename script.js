@@ -60,17 +60,21 @@ const state = {
     bottomInset: 10,
     worldLeft: 0,
     flipTopView: false
-  },
-  sideMisses: {
-    top: 0,
-    bottom: 0
   }
 };
 
 const BALL_INTERVAL_MIN_SEC = 0.1;
 const BALL_INTERVAL_MAX_SEC = 10;
 const BALL_INTERVAL_STEP_SEC = 0.1;
+const CANVAS_MENU_HEIGHT = 16;
 const SETTINGS_STORAGE_KEY = 'pong200.settings';
+const PLAYER_ICON_SIZE = 14;
+const PLAYER_ICONS = {
+  human: new Image(),
+  bot: new Image()
+};
+PLAYER_ICONS.human.src = 'icons/man_24dp_E3E3E3_FILL0_wght400_GRAD0_opsz24.svg';
+PLAYER_ICONS.bot.src = 'icons/computer_24dp_E3E3E3_FILL0_wght400_GRAD0_opsz24.svg';
 
 function saveSettings() {
   const settings = {
@@ -174,7 +178,9 @@ function chooseSide() {
 
 function createPlayer({ name, flag, color, side, isBot = false, isLocal = false }) {
   const { height } = getCanvasSize();
-  const baseY = side === 'bottom' ? height - state.config.bottomInset - state.config.paddleHeight : state.config.topInset;
+  const baseY = side === 'bottom'
+    ? height - state.config.bottomInset - state.config.paddleHeight - CANVAS_MENU_HEIGHT
+    : state.config.topInset + CANVAS_MENU_HEIGHT;
   return {
     id: makeId(isLocal ? 'me' : isBot ? 'bot' : 'pl'),
     name: name || (isBot ? `Bot-${Math.floor(Math.random() * 1000)}` : 'Player'),
@@ -183,6 +189,7 @@ function createPlayer({ name, flag, color, side, isBot = false, isLocal = false 
     side,
     score: 0,
     lastHit: 0,
+    misses: 0,
     paddleX: null,
     paddleY: baseY,
     targetX: null,
@@ -218,8 +225,6 @@ function resetGame() {
   state.players = [];
   state.balls = [];
   state.currentPlayerId = null;
-  state.sideMisses.top = 0;
-  state.sideMisses.bottom = 0;
   state.nextBallAt = performance.now() + state.config.spawnInterval;
   updateUI();
 }
@@ -265,8 +270,8 @@ function spawnBall() {
   if (state.balls.length >= state.players.length * state.config.maxBallsFactor) return;
 
   const { height } = getCanvasSize();
-  const minY = state.config.topInset + state.config.ballRadius + 12;
-  const maxY = height - state.config.bottomInset - state.config.ballRadius - 12;
+  const minY = state.config.topInset + CANVAS_MENU_HEIGHT + state.config.ballRadius + 12;
+  const maxY = height - state.config.bottomInset - CANVAS_MENU_HEIGHT - state.config.ballRadius - 12;
   const angle = ((Math.random() * 80 - 40) * Math.PI) / 180;
   const speedRange = Math.max(0, state.config.maxBallSpeed - state.config.minBallSpeed);
   const speed = (state.config.minBallSpeed + Math.random() * speedRange) * 10;
@@ -291,8 +296,8 @@ function playerPaddleBounds(player) {
     zoneRight - state.config.paddleLength - 4
   );
   const y = player.side === 'bottom'
-    ? height - state.config.bottomInset - state.config.paddleHeight
-    : state.config.topInset;
+    ? height - state.config.bottomInset - state.config.paddleHeight - CANVAS_MENU_HEIGHT
+    : state.config.topInset + CANVAS_MENU_HEIGHT;
   return {
     x,
     y,
@@ -323,19 +328,23 @@ function hitPaddle(player, ball) {
 
 function eliminatePlayer(player) {
   const isCurrent = player.id === state.currentPlayerId;
-  if (player.side) {
-    state.sideMisses[player.side] = clamp(state.sideMisses[player.side] + 1, 0, 3);
+  player.misses = clamp((player.misses || 0) + 1, 0, 3);
+  if (player.misses < 3) {
+    updateUI();
+    return;
   }
 
+  const currentLevel = (player.zoneIndex || 0) + 1;
+  const highestLevel = Math.max(state.columnCount, currentLevel);
   const isLocalCurrent = isCurrent && player.isLocal;
-  if (isLocalCurrent && state.sideMisses[player.side] >= 3) {
-    const currentLevel = (player.zoneIndex || 0) + 1;
-    const highestLevel = Math.max(state.columnCount, currentLevel);
+
+  state.players = state.players.filter((item) => item.id !== player.id);
+  syncWorld();
+
+  if (isLocalCurrent) {
     const again = window.confirm(
       `Game over ${player.name}. Current Level ${currentLevel}. Highest Level ${highestLevel}. Play Again?`
     );
-    state.players = state.players.filter((item) => item.id !== player.id);
-    syncWorld();
     if (again) {
       restartGame({
         name: player.name,
@@ -343,31 +352,13 @@ function eliminatePlayer(player) {
         color: player.color,
         side: player.side
       });
-    } else {
-      state.currentPlayerId = null;
-      updateUI();
+      return;
     }
+    state.currentPlayerId = null;
+    updateUI();
     return;
   }
 
-  state.players = state.players.filter((item) => item.id !== player.id);
-  syncWorld();
-  const nextPlayer = createPlayer({
-    name: player.name,
-    flag: player.flag,
-    color: player.color,
-    side: isCurrent ? player.side : chooseSide(),
-    isBot: player.isBot,
-    isLocal: isCurrent
-  });
-  if (isCurrent) {
-    nextPlayer.score = player.score;
-    state.currentPlayerId = nextPlayer.id;
-  } else {
-    nextPlayer.score = player.score;
-  }
-  state.players.unshift(nextPlayer);
-  syncWorld();
   updateUI();
 }
 
@@ -490,24 +481,68 @@ function getViewScale() {
 }
 
 function drawMissMarkers(cssWidth, cssHeight) {
-  const radius = 5;
-  const gap = 10;
-  const totalWidth = radius * 2 * 3 + gap * 2;
-  const startX = 14;
-  const drawSide = (y, side) => {
-    for (let index = 0; index < 3; index += 1) {
-      const alpha = index < state.sideMisses[side] ? 0.1 : 0.6;
-      ctx.fillStyle = `rgba(255,255,255,${alpha})`;
-      ctx.beginPath();
-      ctx.arc(startX + index * (radius * 2 + gap) + radius, y, radius, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  };
+  const menuHeight = CANVAS_MENU_HEIGHT;
+  const radius = 4;
+  const gap = 6;
+  const padding = 8;
+
   ctx.fillStyle = 'rgba(255,255,255,0.04)';
-  ctx.fillRect(0, 0, cssWidth, 16);
-  ctx.fillRect(0, cssHeight - 16, cssWidth, 16);
-  drawSide(8, 'top');
-  drawSide(cssHeight - 8, 'bottom');
+  ctx.fillRect(0, 0, cssWidth, menuHeight);
+  ctx.fillRect(0, cssHeight - menuHeight, cssWidth, menuHeight);
+
+  ctx.font = '9px ui-monospace, monospace';
+  ctx.textBaseline = 'middle';
+
+  for (let zoneIndex = 0; zoneIndex < state.columnCount; zoneIndex += 1) {
+    const zoneLeft = zoneIndex * state.config.zoneWidth;
+    const zoneRight = zoneLeft + state.config.zoneWidth;
+    const topPlayer = getZonePlayer(zoneIndex, 'top');
+    const bottomPlayer = getZonePlayer(zoneIndex, 'bottom');
+
+    const drawHeader = (player, y) => {
+      if (!player) return;
+      const iconX = zoneLeft + padding;
+      const iconY = y;
+
+      const icon = player.isBot ? PLAYER_ICONS.bot : PLAYER_ICONS.human;
+      if (icon.complete && icon.naturalWidth) {
+        ctx.drawImage(icon, iconX - PLAYER_ICON_SIZE / 2, iconY - PLAYER_ICON_SIZE / 2 - 1, PLAYER_ICON_SIZE, PLAYER_ICON_SIZE);
+      } else {
+        ctx.fillStyle = '#fff';
+        if (player.isBot) {
+          ctx.fillRect(iconX - PLAYER_ICON_SIZE / 2, iconY - PLAYER_ICON_SIZE / 2 - 1, PLAYER_ICON_SIZE, PLAYER_ICON_SIZE);
+        } else {
+          ctx.beginPath();
+          ctx.arc(iconX, iconY - 1, PLAYER_ICON_SIZE / 2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      const displayName = player.isBot ? 'Bot' : player.name.slice(0, 8);
+      ctx.fillStyle = '#fff';
+      ctx.textAlign = 'left';
+      ctx.fillText(displayName, iconX + 12, y - 2);
+      ctx.fillStyle = 'rgba(255,255,255,0.78)';
+      ctx.fillText(`Lvl:${(player.zoneIndex || 0) + 1}`, iconX + 12, y + 5);
+
+      const statsX = zoneRight - padding;
+      ctx.font = '12px ui-monospace, monospace';
+      ctx.textAlign = 'right';
+      ctx.fillText(player.score, statsX, y);
+      ctx.font = '9px ui-monospace, monospace';
+
+      for (let index = 0; index < 3; index += 1) {
+        const alpha = index < (player.misses || 0) ? 0.1 : 0.6;
+        ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+        ctx.beginPath();
+        ctx.arc(statsX - 40 - index * (radius * 2 + gap), y, radius, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    };
+
+    drawHeader(topPlayer, menuHeight / 2);
+    drawHeader(bottomPlayer, cssHeight - menuHeight / 2);
+  }
 }
 
 function cameraXForCurrentPlayer() {
@@ -574,19 +609,6 @@ function render() {
       ctx.strokeRect(paddle.x + 1, paddle.y + 1, paddle.width - 2, paddle.height - 2);
     }
 
-    ctx.fillStyle = '#fff';
-    ctx.font = '12px ui-monospace, monospace';
-    ctx.textBaseline = 'middle';
-    const scoreText = `${player.flag ? player.flag + ' ' : ''}${player.score}`;
-    ctx.textAlign = 'left';
-    ctx.fillText(scoreText, zoneLeft + 5, paddle.y + paddle.height / 2);
-
-    if (isCurrent) {
-      ctx.fillStyle = 'rgba(255,255,255,0.18)';
-      ctx.font = '10px ui-monospace, monospace';
-      ctx.textAlign = 'left';
-      ctx.fillText('YOU', zoneLeft + 6, player.side === 'bottom' ? cssHeight - 18 : 18);
-    }
   }
 
   for (const ball of state.balls) {
