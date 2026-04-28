@@ -575,9 +575,13 @@ function cameraXForCurrentPlayer(viewScale) {
   const zoneCenter = selected.zoneIndex * state.config.zoneWidth + state.config.zoneWidth / 2;
   const visibleWorldWidth = cssWidth / viewScale;
   const halfWorld = visibleWorldWidth / 2;
+  const targetX = zoneCenter - halfWorld;
+  if (visibleWorldWidth >= state.worldWidth) {
+    return targetX;
+  }
   const minX = 0;
   const maxX = Math.max(0, state.worldWidth - visibleWorldWidth);
-  return clamp(zoneCenter - halfWorld, minX, maxX);
+  return clamp(targetX, minX, maxX);
 }
 
 function render() {
