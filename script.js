@@ -612,7 +612,7 @@ function drawMenuOverlay(cssWidth, cssHeight, viewScale, cameraX, worldHeight) {
       ctx.font = `${Math.max(8, 9 * menuScale)}px ui-monospace, monospace`;
 
       for (let index = 0; index < 3; index += 1) {
-        const alpha = index < (player.misses || 0) ? 0.4 : 0.8;
+        const alpha = index < (player.misses || 0) ? 0.2 : 0.8;
         ctx.fillStyle = `rgba(255,255,255,${alpha})`;
         ctx.beginPath();
         ctx.arc(statsX - 40 * menuScale - index * (radius * 2 + gap), y, radius, 0, Math.PI * 2);
