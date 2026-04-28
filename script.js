@@ -5,6 +5,7 @@ const ballCountEl = document.getElementById('ballCount');
 const playerListEl = document.getElementById('playerList');
 const playerNameInput = document.getElementById('playerName');
 const playerFlagInput = document.getElementById('playerFlag');
+const playerColorInput = document.getElementById('playerColor');
 const joinButton = document.getElementById('joinButton');
 const addBotButton = document.getElementById('addBotButton');
 const resetButton = document.getElementById('resetButton');
@@ -61,6 +62,64 @@ const state = {
   }
 };
 
+const BALL_INTERVAL_MIN_SEC = 0.1;
+const BALL_INTERVAL_MAX_SEC = 10;
+const BALL_INTERVAL_STEP_SEC = 0.1;
+const SETTINGS_STORAGE_KEY = 'pong200.settings';
+
+function saveSettings() {
+  const settings = {
+    zoneWidth: Number(zoneWidthInput.value),
+    spawnIntervalSec: Number(ballIntervalInput.value),
+    minBallSpeed: Number(minBallSpeedInput.value),
+    maxBallSpeed: Number(maxBallSpeedInput.value),
+    maxBallsFactor: Number(maxBallsFactorInput.value),
+    flipTopView: menuFlipView.checked,
+    playerName: playerNameInput.value,
+    playerFlag: playerFlagInput.value,
+    playerColor: playerColorInput.value
+  };
+  localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+}
+
+function loadSettings() {
+  const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
+  if (!raw) return;
+  try {
+    const settings = JSON.parse(raw);
+    if (settings.zoneWidth != null) state.config.zoneWidth = Number(settings.zoneWidth);
+    if (settings.spawnIntervalSec != null) state.config.spawnInterval = Math.round(Number(settings.spawnIntervalSec) * 1000);
+    if (settings.minBallSpeed != null) state.config.minBallSpeed = Number(settings.minBallSpeed);
+    if (settings.maxBallSpeed != null) state.config.maxBallSpeed = Number(settings.maxBallSpeed);
+    if (settings.maxBallsFactor != null) state.config.maxBallsFactor = Number(settings.maxBallsFactor);
+    if (settings.flipTopView != null) state.config.flipTopView = Boolean(settings.flipTopView);
+    if (settings.playerName != null) playerNameInput.value = settings.playerName;
+    if (settings.playerFlag != null) playerFlagInput.value = settings.playerFlag;
+    if (settings.playerColor != null) playerColorInput.value = settings.playerColor;
+  } catch (error) {
+    console.warn('Could not load saved settings:', error);
+  }
+}
+
+function applySettingsToInputs() {
+  zoneWidthInput.value = String(state.config.zoneWidth);
+  zoneWidthLabel.textContent = String(state.config.zoneWidth);
+  setBallIntervalSeconds(state.config.spawnInterval / 1000);
+  minBallSpeedInput.value = String(state.config.minBallSpeed);
+  minBallSpeedLabel.textContent = state.config.minBallSpeed.toFixed(1);
+  maxBallSpeedInput.value = String(state.config.maxBallSpeed);
+  maxBallSpeedLabel.textContent = state.config.maxBallSpeed.toFixed(1);
+  maxBallsFactorInput.value = String(state.config.maxBallsFactor);
+  menuFlipView.checked = state.config.flipTopView;
+}
+
+function setBallIntervalSeconds(seconds) {
+  const clamped = clamp(seconds, BALL_INTERVAL_MIN_SEC, BALL_INTERVAL_MAX_SEC);
+  state.config.spawnInterval = Math.round(clamped * 1000);
+  ballIntervalInput.value = clamped.toFixed(1);
+  ballIntervalLabel.textContent = `${clamped.toFixed(1)}s`;
+}
+
 // ably
 
 
@@ -107,13 +166,14 @@ function chooseSide() {
   return state.players.length % 2 === 0 ? 'bottom' : 'top';
 }
 
-function createPlayer({ name, flag, side, isBot = false, isLocal = false }) {
+function createPlayer({ name, flag, color, side, isBot = false, isLocal = false }) {
   const { height } = getCanvasSize();
   const baseY = side === 'bottom' ? height - state.config.bottomInset - state.config.paddleHeight : state.config.topInset;
   return {
     id: makeId(isLocal ? 'me' : isBot ? 'bot' : 'pl'),
     name: name || (isBot ? `Bot-${Math.floor(Math.random() * 1000)}` : 'Player'),
     flag: flag || '',
+    color: color || '#fff',
     side,
     score: 0,
     lastHit: 0,
@@ -131,6 +191,7 @@ function addPlayer(options) {
     side: options.side || chooseSide(),
     name: options.name,
     flag: options.flag,
+    color: options.color || (options.isLocal ? playerColorInput.value : '#fff'),
     isBot: options.isBot,
     isLocal: options.isLocal
   });
@@ -442,7 +503,8 @@ function render() {
 
     const paddle = playerPaddleBounds(player);
     const isLocal = player.isLocal;
-    ctx.fillStyle = isCurrent ? '#fff' : isLocal ? '#f8f8f8' : '#ccc';
+    const paddleColor = player.color || (isCurrent ? '#fff' : isLocal ? '#f8f8f8' : '#ccc');
+    ctx.fillStyle = paddleColor;
     ctx.fillRect(paddle.x, paddle.y, paddle.width, paddle.height);
     if (isLocal && !isCurrent) {
       ctx.strokeStyle = 'rgba(255,255,255,0.45)';
@@ -537,22 +599,35 @@ function attachEvents() {
     addPlayer({
       name: playerNameInput.value.trim() || 'You',
       flag: playerFlagInput.value,
+      color: playerColorInput.value,
       isLocal: true
     });
   });
   addBotButton.addEventListener('click', addBot);
   resetButton.addEventListener('click', resetGame);
 
+  playerNameInput.addEventListener('input', saveSettings);
+  playerFlagInput.addEventListener('change', saveSettings);
+
   zoneWidthInput.addEventListener('input', () => {
     state.config.zoneWidth = Number(zoneWidthInput.value);
     zoneWidthLabel.textContent = zoneWidthInput.value;
     syncWorld();
     resizeCanvas();
+    saveSettings();
   });
 
   ballIntervalInput.addEventListener('input', () => {
-    state.config.spawnInterval = Number(ballIntervalInput.value);
-    ballIntervalLabel.textContent = `${Math.floor(state.config.spawnInterval / 1000)}s`;
+    setBallIntervalSeconds(Number(ballIntervalInput.value));
+    saveSettings();
+  });
+
+  playerColorInput.addEventListener('input', () => {
+    const current = getCurrentPlayer();
+    if (current && current.isLocal) {
+      current.color = playerColorInput.value;
+    }
+    saveSettings();
   });
 
   minBallSpeedInput.addEventListener('input', () => {
@@ -564,6 +639,7 @@ function attachEvents() {
       maxBallSpeedLabel.textContent = minSpeed.toFixed(1);
     }
     minBallSpeedLabel.textContent = minSpeed.toFixed(1);
+    saveSettings();
   });
   maxBallSpeedInput.addEventListener('input', () => {
     state.config.maxBallSpeed = Number(maxBallSpeedInput.value);
@@ -574,14 +650,17 @@ function attachEvents() {
       minBallSpeedLabel.textContent = maxSpeed.toFixed(1);
     }
     maxBallSpeedLabel.textContent = maxSpeed.toFixed(1);
+    saveSettings();
   });
 
   maxBallsFactorInput.addEventListener('input', () => {
     state.config.maxBallsFactor = clamp(Number(maxBallsFactorInput.value), 1, 4);
+    saveSettings();
   });
 
   menuFlipView.addEventListener('change', () => {
     state.config.flipTopView = menuFlipView.checked;
+    saveSettings();
   });
   optionsToggle.addEventListener('click', (event) => {
     event.stopPropagation();
@@ -662,6 +741,14 @@ function gameLoop() {
 function setup() {
   initFlags();
   attachEvents();
+  loadSettings();
+  applySettingsToInputs();
+  state.nextBallAt = performance.now() + state.config.spawnInterval;
+
+  ballIntervalInput.min = String(BALL_INTERVAL_MIN_SEC);
+  ballIntervalInput.max = String(BALL_INTERVAL_MAX_SEC);
+  ballIntervalInput.step = String(BALL_INTERVAL_STEP_SEC);
+
   resizeCanvas();
   addBot();
   addBot();
