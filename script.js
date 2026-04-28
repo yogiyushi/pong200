@@ -859,7 +859,7 @@ function attachEvents() {
     if (!current) return;
     isDragging = true;
     const rect = canvas.getBoundingClientRect();
-    const rawX = (event.clientX - rect.left) / getViewScale();
+    const rawX = (event.clientX - rect.left) / getViewScale() + state.cameraX;
     const zoneLeft = current.zoneIndex * state.config.zoneWidth;
     const zoneRight = zoneLeft + state.config.zoneWidth;
     current.paddleX = clamp(
