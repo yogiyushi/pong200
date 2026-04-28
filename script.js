@@ -489,8 +489,9 @@ function getViewScale() {
   return Math.max(cssWidth / state.worldWidth, minScale);
 }
 
-function drawMissMarkers(cssWidth, cssHeight) {
+function drawMissMarkers(cssWidth, cssHeight, viewScale, cameraX) {
   const menuHeight = CANVAS_MENU_HEIGHT;
+  const scaledZoneWidth = state.config.zoneWidth * viewScale;
   const radius = 4;
   const gap = 6;
   const padding = 8;
@@ -500,16 +501,16 @@ function drawMissMarkers(cssWidth, cssHeight) {
   ctx.fillRect(0, cssHeight - menuHeight, cssWidth, menuHeight);
 
   for (let zoneIndex = 0; zoneIndex < state.columnCount; zoneIndex += 1) {
-    const zoneLeft = zoneIndex * state.config.zoneWidth;
+    const zoneLeft = (zoneIndex * state.config.zoneWidth - cameraX) * viewScale;
     const topFlash = getMenuFlashAlpha('top', zoneIndex);
     const bottomFlash = getMenuFlashAlpha('bottom', zoneIndex);
     if (topFlash > 0) {
       ctx.fillStyle = `rgba(255,255,255,${topFlash * 0.85})`;
-      ctx.fillRect(zoneLeft, 0, state.config.zoneWidth, menuHeight);
+      ctx.fillRect(zoneLeft, 0, scaledZoneWidth, menuHeight);
     }
     if (bottomFlash > 0) {
       ctx.fillStyle = `rgba(255,255,255,${bottomFlash * 0.85})`;
-      ctx.fillRect(zoneLeft, cssHeight - menuHeight, state.config.zoneWidth, menuHeight);
+      ctx.fillRect(zoneLeft, cssHeight - menuHeight, scaledZoneWidth, menuHeight);
     }
   }
 
@@ -517,8 +518,8 @@ function drawMissMarkers(cssWidth, cssHeight) {
   ctx.textBaseline = 'middle';
 
   for (let zoneIndex = 0; zoneIndex < state.columnCount; zoneIndex += 1) {
-    const zoneLeft = zoneIndex * state.config.zoneWidth;
-    const zoneRight = zoneLeft + state.config.zoneWidth;
+    const zoneLeft = (zoneIndex * state.config.zoneWidth - cameraX) * viewScale;
+    const zoneRight = zoneLeft + scaledZoneWidth;
     const topPlayer = getZonePlayer(zoneIndex, 'top');
     const bottomPlayer = getZonePlayer(zoneIndex, 'bottom');
 
@@ -644,7 +645,7 @@ function render() {
   }
 
   ctx.restore();
-  drawMissMarkers(cssWidth, cssHeight);
+  drawMissMarkers(cssWidth, cssHeight, viewScale, cameraX);
 }
 
 function refreshUI() {
