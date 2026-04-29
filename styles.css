@@ -146,7 +146,7 @@ select {
   position: relative;
   display: flex;
   flex: 1;
-  background: #090909;
+  background: #111111;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 16px;
   overflow: hidden;
