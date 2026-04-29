@@ -163,7 +163,7 @@ canvas {
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-end;
   padding: 10px 14px 15px;
   gap: 18px;
 }
@@ -171,19 +171,22 @@ canvas {
   display: flex;
   align-items: center;
   gap: 10px;
-  flex: 1 1 320px;
+  flex: 1 1 220px;
   min-width: 0;
   border-radius: 12px;
   padding: 0px 12px;
+  flex-wrap: wrap;
 }
 .zoom-bar label,
 .zoom-bar span {
   font-size: 0.82rem;
   color: rgba(201, 201, 201, 0.88);
   white-space: nowrap;
+  flex-shrink: 0;
 }
 .zoom-bar input[type="range"] {
-  width: 100%;
+  flex: 1 1 0;
+  min-width: 0;
   accent-color: #4f4f4f;
 }
 .zoom-bar input[type="range"]::-webkit-slider-runnable-track {
@@ -213,9 +216,9 @@ canvas {
 }
 .canvas-info-bar {
   display: flex;
-  flex: 0 1 240px;
+  flex: 1 1 240px;
   justify-content: flex-end;
-  align-items: center;
+  align-items: flex-end;
   flex-wrap: wrap;
   gap: 10px;
   padding: 0;
@@ -224,6 +227,10 @@ canvas {
   text-align: right;
   min-height: 16px;
   min-width: 0;
+}
+.canvas-info-bar span {
+  display: inline-flex;
+  white-space: nowrap;
 }
 .canvas-info-bar strong {
   font-weight: 700;

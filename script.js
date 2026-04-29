@@ -4,6 +4,8 @@ const playerCountEl = document.getElementById('playerCount');
 const ballCountEl = document.getElementById('ballCount');
 const canvasPlayerCountEl = document.getElementById('canvasPlayerCount');
 const canvasBallCountEl = document.getElementById('canvasBallCount');
+const canvasFPSEl = document.getElementById('canvasFPS');
+const canvasFrameTimeEl = document.getElementById('canvasFrameTime');
 const playerListEl = document.getElementById('playerList');
 const playerNameInput = document.getElementById('playerName');
 const playerColorInput = document.getElementById('playerColor');
@@ -60,6 +62,9 @@ const state = {
   cameraXTarget: 0,
   cameraXStart: 0,
   cameraXStartTime: performance.now(),
+  fps: 0,
+  frameTime: 0,
+  lastFpsUpdate: performance.now(),
   menuFlash: {
     top: {},
     bottom: {}
@@ -1173,10 +1178,21 @@ function attachEvents() {
 
 function gameLoop() {
   const now = performance.now();
-  const delta = Math.min(0.018, (now - state.lastTick) / 16.67);
+  const frameTime = now - state.lastTick;
+  state.frameTime = frameTime;
+  state.fps = frameTime > 0 ? 1000 / frameTime : 0;
   state.lastTick = now;
+
+  const delta = Math.min(0.018, frameTime / 16.67);
   updateGame(delta);
   render();
+
+  if (now - state.lastFpsUpdate >= 1000) {
+    state.lastFpsUpdate = now;
+    if (canvasFPSEl) canvasFPSEl.textContent = String(Math.round(state.fps));
+    if (canvasFrameTimeEl) canvasFrameTimeEl.textContent = state.frameTime.toFixed(1);
+  }
+
   requestAnimationFrame(gameLoop);
 }
 
