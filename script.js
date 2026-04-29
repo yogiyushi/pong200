@@ -32,6 +32,20 @@ const menuFlipView = document.getElementById('menuFlipView');
 const startingBotCountInput = document.getElementById('startingBotCount');
 const startingBotCountLabel = document.getElementById('startingBotCountLabel');
 const gamePanel = document.querySelector('.game-panel');
+const ballCanvas = document.getElementById('ballCanvas');
+let gl = null;
+let glProgram = null;
+let glPositionBuffer = null;
+let glPositionLocation = null;
+let glPointSizeLocation = null;
+let glResolutionLocation = null;
+let glCameraXLocation = null;
+let glViewScaleLocation = null;
+let glYOffsetLocation = null;
+let glPixelRatio = 1;
+let ballDataBuffer = null;
+let ballDataView = null;
+let paddleState = null;
 
 const state = {
   players: [],
@@ -173,6 +187,101 @@ function setStartingBotCount(count) {
   startingBotCountLabel.textContent = String(value);
 }
 
+function createShader(gl, type, source) {
+  const shader = gl.createShader(type);
+  gl.shaderSource(shader, source);
+  gl.compileShader(shader);
+  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+    const info = gl.getShaderInfoLog(shader);
+    gl.deleteShader(shader);
+    throw new Error(`Shader compile failed: ${info}`);
+  }
+  return shader;
+}
+
+function createProgram(gl, vertexSource, fragmentSource) {
+  const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexSource);
+  const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentSource);
+  const program = gl.createProgram();
+  gl.attachShader(program, vertexShader);
+  gl.attachShader(program, fragmentShader);
+  gl.linkProgram(program);
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    const info = gl.getProgramInfoLog(program);
+    gl.deleteProgram(program);
+    throw new Error(`Program link failed: ${info}`);
+  }
+  return program;
+}
+
+function initWebGL(maxBalls) {
+  if (!ballCanvas) return null;
+  const context = ballCanvas.getContext('webgl', { alpha: true, antialias: false });
+  if (!context) return null;
+  const vertexSource = `
+    attribute vec2 a_position;
+    uniform float u_pointSize;
+    uniform vec2 u_resolution;
+    uniform float u_cameraX;
+    uniform float u_viewScale;
+    uniform float u_yOffset;
+    void main() {
+      vec2 pos = vec2((a_position.x - u_cameraX) * u_viewScale, a_position.y * u_viewScale + u_yOffset);
+      vec2 clip = vec2(pos.x / u_resolution.x * 2.0 - 1.0, 1.0 - pos.y / u_resolution.y * 2.0);
+      gl_Position = vec4(clip, 0.0, 1.0);
+      gl_PointSize = u_pointSize;
+    }
+  `;
+  const fragmentSource = `
+    precision mediump float;
+    void main() {
+      gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0);
+    }
+  `;
+  const program = createProgram(context, vertexSource, fragmentSource);
+  const positionBuffer = context.createBuffer();
+  context.bindBuffer(context.ARRAY_BUFFER, positionBuffer);
+  context.bufferData(context.ARRAY_BUFFER, maxBalls * 4 * Float32Array.BYTES_PER_ELEMENT, context.DYNAMIC_DRAW);
+  context.enable(context.BLEND);
+  context.blendFunc(context.SRC_ALPHA, context.ONE_MINUS_SRC_ALPHA);
+  context.clearColor(0, 0, 0, 0);
+
+  glProgram = program;
+  glPositionBuffer = positionBuffer;
+  glPositionLocation = context.getAttribLocation(program, 'a_position');
+  glPointSizeLocation = context.getUniformLocation(program, 'u_pointSize');
+  glResolutionLocation = context.getUniformLocation(program, 'u_resolution');
+  glCameraXLocation = context.getUniformLocation(program, 'u_cameraX');
+  glViewScaleLocation = context.getUniformLocation(program, 'u_viewScale');
+  glYOffsetLocation = context.getUniformLocation(program, 'u_yOffset');
+  context.enableVertexAttribArray(glPositionLocation);
+  context.vertexAttribPointer(glPositionLocation, 2, context.FLOAT, false, 16, 0);
+  return context;
+}
+
+function drawWebGLBalls(cssWidth, cssHeight, worldHeight, viewScale) {
+  if (!gl || !glProgram) return;
+  const ballCount = getBallCount();
+  gl.viewport(0, 0, ballCanvas.width, ballCanvas.height);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  if (ballCount === 0) return;
+
+  const data = getBallData();
+  const floatData = data.subarray(0, ballCount * 4);
+  gl.bindBuffer(gl.ARRAY_BUFFER, glPositionBuffer);
+  gl.bufferSubData(gl.ARRAY_BUFFER, 0, floatData);
+  gl.useProgram(glProgram);
+
+  const yOffset = (cssHeight - worldHeight * viewScale) / 2;
+  gl.uniform2f(glResolutionLocation, cssWidth, cssHeight);
+  gl.uniform1f(glCameraXLocation, state.cameraX);
+  gl.uniform1f(glViewScaleLocation, viewScale);
+  gl.uniform1f(glYOffsetLocation, yOffset);
+  gl.uniform1f(glPointSizeLocation, Math.max(1, state.config.ballRadius * 2 * viewScale * glPixelRatio));
+
+  gl.drawArrays(gl.POINTS, 0, ballCount);
+}
+
 function createBallEngine(maxBalls) {
   const engine = new BallEngine(maxBalls);
   const previous = state.ballEngine;
@@ -194,16 +303,16 @@ function initBallWorker(maxBalls) {
     if (message.type === 'updated') {
       state.ballWorkerCount = message.ballCount;
       state.ballWorkerData = new Float32Array(message.data);
+      if (message.events) handleBallWorkerEvents(message.events);
       if (Array.isArray(message.flashes)) {
         for (const flash of message.flashes) {
           state.menuFlash[flash.side][flash.zoneIndex] = 1;
         }
       }
-      if (Array.isArray(message.events)) {
-        handleBallWorkerEvents(message.events);
-      }
     }
   };
+  state.ballWorkerData = new Float32Array(maxBalls * 4);
+  state.ballWorkerCount = 0;
   worker.postMessage({
     type: 'init',
     maxBalls
@@ -1118,21 +1227,25 @@ function render() {
 
   }
 
-  const visibleWorldLeft = state.cameraX;
-  const visibleWorldRight = state.cameraX + cssWidth / viewScale;
-  const ballCount = getBallCount();
-  const data = getBallData();
-  if (ballCount > 0) {
-    const V = 4;
-    const size = state.config.ballRadius * 2;
-    ctx.fillStyle = '#fff';
-    for (let i = 0, idx = 0; i < ballCount; i += 1, idx += V) {
-      const x = data[idx];
-      const y = data[idx + 1];
-      if (x + state.config.ballRadius < visibleWorldLeft || x - state.config.ballRadius > visibleWorldRight) {
-        continue;
+  if (gl) {
+    drawWebGLBalls(cssWidth, cssHeight, worldHeight, viewScale);
+  } else {
+    const visibleWorldLeft = state.cameraX;
+    const visibleWorldRight = state.cameraX + cssWidth / viewScale;
+    const ballCount = getBallCount();
+    const data = getBallData();
+    if (ballCount > 0) {
+      const V = 4;
+      const size = state.config.ballRadius * 2;
+      ctx.fillStyle = '#fff';
+      for (let i = 0, idx = 0; i < ballCount; i += 1, idx += V) {
+        const x = data[idx];
+        const y = data[idx + 1];
+        if (x + state.config.ballRadius < visibleWorldLeft || x - state.config.ballRadius > visibleWorldRight) {
+          continue;
+        }
+        ctx.fillRect(x - state.config.ballRadius, y - state.config.ballRadius, size, size);
       }
-      ctx.fillRect(x - state.config.ballRadius, y - state.config.ballRadius, size, size);
     }
   }
 
@@ -1184,11 +1297,24 @@ function updateUI() {
 
 function resizeCanvas() {
   canvas.style.height = `${getCanvasHeight()}px`;
+  if (ballCanvas) {
+    ballCanvas.style.height = `${getCanvasHeight()}px`;
+  }
   const rect = canvas.getBoundingClientRect();
   const pixelRatio = Math.min(MAX_CANVAS_PIXEL_RATIO, devicePixelRatio);
   canvas.width = Math.floor(rect.width * pixelRatio);
   canvas.height = Math.floor(rect.height * pixelRatio);
+  if (ballCanvas) {
+    ballCanvas.width = canvas.width;
+    ballCanvas.height = canvas.height;
+    ballCanvas.style.width = `${rect.width}px`;
+    ballCanvas.style.height = `${rect.height}px`;
+  }
   ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+  glPixelRatio = pixelRatio;
+  if (gl) {
+    gl.viewport(0, 0, ballCanvas.width, ballCanvas.height);
+  }
   render();
 }
 
@@ -1447,6 +1573,7 @@ function setup() {
 
   state.ballEngine = createBallEngine(state.config.maxBallCount);
   state.ballWorker = initBallWorker(state.config.maxBallCount);
+  gl = initWebGL(state.config.maxBallCount);
 
   resizeCanvas();
   for (let index = 0; index < state.config.startingBotCount; index += 1) {

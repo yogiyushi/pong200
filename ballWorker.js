@@ -54,59 +54,62 @@ function resizeEngine(maxBalls) {
 }
 
 function getZonePlayer(paddles, side, zoneIndex) {
-  return paddles?.[side]?.find((player) => player.zoneIndex === zoneIndex) || null;
+  return paddles?.[side]?.[zoneIndex] || null;
 }
 
-function hitPaddle(player, ball, config) {
-  const hitX = ball.x - (player.x + player.width / 2);
+function hitPaddle(player, x, y, vx, vy, config, radius) {
+  const hitX = x - (player.x + player.width / 2);
   const normalized = clamp(hitX / (player.width / 2), -1, 1);
-  if ((player.side === 'top' && ball.vy < 0) || (player.side === 'bottom' && ball.vy > 0)) {
-    const incomingFromLeft = ball.vx > 0;
-    const incomingFromRight = ball.vx < 0;
+  if ((player.side === 'top' && vy < 0) || (player.side === 'bottom' && vy > 0)) {
+    const incomingFromLeft = vx > 0;
     const edgeAngle = (4.5 * Math.PI) / 180;
-    const speed = Math.hypot(ball.vx, ball.vy);
+    const speed = Math.hypot(vx, vy);
     if (speed === 0) return null;
 
     let outVx = 0;
     let outVy = 0;
-    const absVx = Math.abs(ball.vx);
-    const incomingAngle = Math.atan2(Math.abs(ball.vy), absVx);
+    const absVx = Math.abs(vx);
+    const incomingAngle = Math.atan2(Math.abs(vy), absVx);
 
     if (incomingFromLeft) {
       if (normalized <= 0) {
         const xFactor = 1 + 2 * normalized;
         outVx = xFactor * absVx;
-        outVy = -ball.vy;
+        outVy = -vy;
       } else {
         const bounceAngle = incomingAngle * (1 - normalized) + edgeAngle * normalized;
         outVx = speed * Math.cos(bounceAngle);
-        outVy = -Math.sign(ball.vy) * speed * Math.sin(bounceAngle);
+        outVy = -Math.sign(vy) * speed * Math.sin(bounceAngle);
       }
-    } else if (incomingFromRight) {
+    } else {
       if (normalized >= 0) {
         const xFactor = 1 - 2 * normalized;
         outVx = -absVx * xFactor;
-        outVy = -ball.vy;
+        outVy = -vy;
       } else {
         const bounceAngle = incomingAngle * (1 + normalized) + edgeAngle * -normalized;
         outVx = -speed * Math.cos(bounceAngle);
-        outVy = -Math.sign(ball.vy) * speed * Math.sin(bounceAngle);
+        outVy = -Math.sign(vy) * speed * Math.sin(bounceAngle);
       }
     }
 
-    const edgeBoost = incomingFromLeft
-      ? Math.max(0, normalized)
-      : Math.max(0, -normalized);
+    const edgeBoost = incomingFromLeft ? Math.max(0, normalized) : Math.max(0, -normalized);
     const boostFactor = 1 + 0.2 * edgeBoost;
     const maxSpeed = config.maxBallSpeed * 10;
     const finalSpeed = Math.min(speed * boostFactor, maxSpeed);
     const scale = finalSpeed / speed;
-    ball.vx = outVx * scale;
-    ball.vy = outVy * scale;
-    ball.y = player.side === 'top'
-      ? player.y + player.height + ball.radius + 1
-      : player.y - ball.radius - 1;
-    return { type: 'hit', playerId: player.id };
+    const newVx = outVx * scale;
+    const newVy = outVy * scale;
+    const newY = player.side === 'top'
+      ? player.y + player.height + radius + 1
+      : player.y - radius - 1;
+    return {
+      type: 'hit',
+      playerId: player.id,
+      vx: newVx,
+      vy: newVy,
+      y: newY
+    };
   }
   return null;
 }
@@ -140,8 +143,9 @@ function updateBalls(params) {
   let writeIdx = 0;
   const events = [];
   const flashes = [];
+  const totalZones = Math.max(1, Math.ceil(worldWidth / zoneWidth));
 
-  for (let i = 0, readIdx = 0; i < engine.ballCount; i += 1, readIdx += V) {
+  for (let readIdx = 0; readIdx < engine.ballCount * V; readIdx += V) {
     let x = data[readIdx];
     let y = data[readIdx + 1];
     let vx = data[readIdx + 2];
@@ -158,18 +162,16 @@ function updateBalls(params) {
       vx = -Math.abs(vx);
     }
 
-const totalZones = Math.max(1, Math.ceil(worldWidth / zoneWidth));
-  const baseZone = Math.max(0, Math.min(Math.floor(x / zoneWidth), totalZones - 1));
-  const zones = [baseZone];
-  const zoneLeftEdge = baseZone * zoneWidth;
-  const zoneRightEdge = zoneLeftEdge + zoneWidth;
-  if (x - radius < zoneLeftEdge && baseZone > 0) zones.push(baseZone - 1);
-  if (x + radius > zoneRightEdge && baseZone < totalZones - 1) zones.push(baseZone + 1);
+    const baseZone = Math.max(0, Math.min(Math.floor(x / zoneWidth), totalZones - 1));
+    const zones = [baseZone];
+    const zoneLeftEdge = baseZone * zoneWidth;
+    const zoneRightEdge = zoneLeftEdge + zoneWidth;
+    if (x - radius < zoneLeftEdge && baseZone > 0) zones.push(baseZone - 1);
+    if (x + radius > zoneRightEdge && baseZone < totalZones - 1) zones.push(baseZone + 1);
 
-    const ball = { x, y, vx, vy, radius };
     if (vy < 0 && y - radius <= topPaddleBottom) {
-      for (const zoneIndex of zones) {
-        const player = getZonePlayer(paddles, 'top', zoneIndex);
+      for (let j = 0; j < zones.length; j += 1) {
+        const player = getZonePlayer(paddles, 'top', zones[j]);
         if (!player) continue;
         if (
           x + radius >= player.x &&
@@ -177,18 +179,19 @@ const totalZones = Math.max(1, Math.ceil(worldWidth / zoneWidth));
           y + radius >= player.y &&
           y - radius <= player.y + player.height
         ) {
-          const event = hitPaddle(player, ball, config);
-          if (event) events.push(event);
-          x = ball.x;
-          y = ball.y;
-          vx = ball.vx;
-          vy = ball.vy;
+          const event = hitPaddle(player, x, y, vx, vy, config, radius);
+          if (event) {
+            events.push(event);
+            vx = event.vx;
+            vy = event.vy;
+            y = event.y;
+          }
           break;
         }
       }
     } else if (vy > 0 && y + radius >= bottomPaddleTop) {
-      for (const zoneIndex of zones) {
-        const player = getZonePlayer(paddles, 'bottom', zoneIndex);
+      for (let j = 0; j < zones.length; j += 1) {
+        const player = getZonePlayer(paddles, 'bottom', zones[j]);
         if (!player) continue;
         if (
           x + radius >= player.x &&
@@ -196,18 +199,19 @@ const totalZones = Math.max(1, Math.ceil(worldWidth / zoneWidth));
           y + radius >= player.y &&
           y - radius <= player.y + player.height
         ) {
-          const event = hitPaddle(player, ball, config);
-          if (event) events.push(event);
-          x = ball.x;
-          y = ball.y;
-          vx = ball.vx;
-          vy = ball.vy;
+          const event = hitPaddle(player, x, y, vx, vy, config, radius);
+          if (event) {
+            events.push(event);
+            vx = event.vx;
+            vy = event.vy;
+            y = event.y;
+          }
           break;
         }
       }
     }
 
-    const zoneIndex = Math.max(0, Math.min(Math.floor(x / zoneWidth), Math.max(paddles.top.length, paddles.bottom.length) - 1));
+    const zoneIndex = Math.max(0, Math.min(Math.floor(x / zoneWidth), totalZones - 1));
     const topHit = y - radius <= menuHeight;
     const bottomHit = y + radius >= height - menuHeight;
     if (topHit || bottomHit) {
