@@ -30,7 +30,7 @@ const menuFlipView = document.getElementById('menuFlipView');
 
 const state = {
   players: [],
-  balls: [],
+  ballEngine: null,
   currentPlayerId: null,
   lastTick: performance.now(),
   nextBallAt: performance.now() + 5000,
@@ -368,7 +368,7 @@ function addBot() {
 
 function resetGame() {
   state.players = [];
-  state.balls = [];
+  state.ballEngine?.reset();
   state.currentPlayerId = null;
   state.nextBallAt = performance.now() + state.config.spawnInterval;
   updateUI();
@@ -446,22 +446,15 @@ function syncWorld() {
 
 function spawnBall() {
   if (state.players.length === 0) return;
-  if (state.balls.length >= state.players.length * state.config.maxBallsFactor) return;
+  const engine = state.ballEngine;
+  if (!engine) return;
+  if (engine.ballCount >= state.players.length * state.config.maxBallsFactor) return;
 
   const { height } = getCanvasSize();
   const minY = state.config.topInset + CANVAS_MENU_HEIGHT + state.config.ballRadius + 12;
   const maxY = height - state.config.bottomInset - CANVAS_MENU_HEIGHT - state.config.ballRadius - 12;
-  const angle = ((Math.random() * 80 - 40) * Math.PI) / 180;
-  const speedRange = Math.max(0, state.config.maxBallSpeed - state.config.minBallSpeed);
-  const speed = (state.config.minBallSpeed + Math.random() * speedRange) * 10;
-  state.balls.push({
-    x: 8,
-    y: minY + Math.random() * (maxY - minY),
-    vx: Math.cos(angle) * speed,
-    vy: Math.sin(angle) * speed,
-    radius: state.config.ballRadius,
-    lastZone: 0
-  });
+  const startY = minY + Math.random() * (maxY - minY);
+  state.ballEngine.spawnBall(8, startY, state.config.minBallSpeed * 10, state.config.maxBallSpeed * 10);
   updateUI();
 }
 
@@ -586,65 +579,123 @@ function eliminatePlayer(player) {
 }
 
 function updateBalls(delta) {
-  const aliveBalls = [];
-  const leftWallLimit = state.config.zoneWidth * 0.25;
-  for (const ball of state.balls) {
-    ball.x += ball.vx * delta;
-    ball.y += ball.vy * delta;
+  const engine = state.ballEngine;
+  if (!engine || engine.ballCount === 0) return;
 
-    if (ball.x - ball.radius <= 0) {
-      ball.x = ball.radius;
-      ball.vx = Math.abs(ball.vx);
+  const data = engine.data;
+  const V = engine.varsPerBall;
+  const { height } = getCanvasSize();
+  const worldRight = state.worldWidth;
+  const radius = state.config.ballRadius;
+  const topPaddleBottom = CANVAS_MENU_HEIGHT + 1 + state.config.paddleHeight;
+  const bottomPaddleTop = height - state.config.paddleHeight - CANVAS_MENU_HEIGHT - 1;
+
+  const topPaddles = [];
+  const bottomPaddles = [];
+  for (const player of state.players) {
+    const paddle = playerPaddleBounds(player);
+    if (player.side === 'top') {
+      topPaddles.push({ player, paddle });
+    } else {
+      bottomPaddles.push({ player, paddle });
+    }
+  }
+
+  let writeIdx = 0;
+  for (let i = 0, readIdx = 0; i < engine.ballCount; i += 1, readIdx += V) {
+    let x = data[readIdx];
+    let y = data[readIdx + 1];
+    let vx = data[readIdx + 2];
+    let vy = data[readIdx + 3];
+
+    x += vx * delta;
+    y += vy * delta;
+
+    if (x - radius <= 0) {
+      x = radius;
+      vx = Math.abs(vx);
+    } else if (x + radius >= worldRight) {
+      x = worldRight - radius;
+      vx = -Math.abs(vx);
     }
 
-    const worldRight = state.worldWidth;
-    if (ball.x + ball.radius >= worldRight) {
-      ball.x = worldRight - ball.radius;
-      ball.vx = -Math.abs(ball.vx);
-    }
-
-    const zoneIndex = Math.max(0, Math.min(state.columnCount - 1, Math.floor(ball.x / state.config.zoneWidth)));
-    const side = ball.vy > 0 ? 'bottom' : 'top';
-    const player = getZonePlayer(zoneIndex, side);
-    if (player) {
-      const paddle = playerPaddleBounds(player);
-      const collided =
-        ball.x + ball.radius >= paddle.x &&
-        ball.x - ball.radius <= paddle.x + paddle.width &&
-        ball.y + ball.radius >= paddle.y &&
-        ball.y - ball.radius <= paddle.y + paddle.height;
-      if (collided) {
-        hitPaddle(player, ball);
+    let zoneIndex = Math.max(0, Math.min(state.columnCount - 1, Math.floor(x / state.config.zoneWidth)));
+    const ball = { x, y, vx, vy, radius };
+    if (vy < 0 && y - radius <= topPaddleBottom) {
+      for (const item of topPaddles) {
+        const paddle = item.paddle;
+        if (
+          x + radius >= paddle.x &&
+          x - radius <= paddle.x + paddle.width &&
+          y + radius >= paddle.y &&
+          y - radius <= paddle.y + paddle.height
+        ) {
+          hitPaddle(item.player, ball);
+          x = ball.x;
+          y = ball.y;
+          vx = ball.vx;
+          vy = ball.vy;
+          break;
+        }
+      }
+    } else if (vy > 0 && y + radius >= bottomPaddleTop) {
+      for (const item of bottomPaddles) {
+        const paddle = item.paddle;
+        if (
+          x + radius >= paddle.x &&
+          x - radius <= paddle.x + paddle.width &&
+          y + radius >= paddle.y &&
+          y - radius <= paddle.y + paddle.height
+        ) {
+          hitPaddle(item.player, ball);
+          x = ball.x;
+          y = ball.y;
+          vx = ball.vx;
+          vy = ball.vy;
+          break;
+        }
       }
     }
 
-    const { height } = getCanvasSize();
-    const topHit = ball.y - ball.radius <= CANVAS_MENU_HEIGHT;
-    const bottomHit = ball.y + ball.radius >= height - CANVAS_MENU_HEIGHT;
+    zoneIndex = Math.max(0, Math.min(state.columnCount - 1, Math.floor(x / state.config.zoneWidth)));
+    const topHit = y - radius <= CANVAS_MENU_HEIGHT;
+    const bottomHit = y + radius >= height - CANVAS_MENU_HEIGHT;
     if (topHit || bottomHit) {
       const side = topHit ? 'top' : 'bottom';
       state.menuFlash[side][zoneIndex] = 1;
+      const player = getZonePlayer(zoneIndex, side);
       if (player) {
         eliminatePlayer(player);
         continue;
       }
     }
 
-    const outOfRangeHorizontally = ball.x + ball.radius < -60 || ball.x - ball.radius > state.worldWidth + 60;
-    const outOfRangeVertically = ball.y + ball.radius < -60 || ball.y - ball.radius > height + 60;
+    const outOfRangeHorizontally = x + radius < -60 || x - radius > state.worldWidth + 60;
+    const outOfRangeVertically = y + radius < -60 || y - radius > height + 60;
     if (!outOfRangeHorizontally && !outOfRangeVertically) {
-      aliveBalls.push(ball);
+      data[writeIdx] = x;
+      data[writeIdx + 1] = y;
+      data[writeIdx + 2] = vx;
+      data[writeIdx + 3] = vy;
+      writeIdx += V;
     }
   }
-  state.balls = aliveBalls;
+  engine.ballCount = writeIdx / V;
 }
 
 function updateBots(delta) {
+  const engine = state.ballEngine;
   const zoneBalls = Array.from({ length: state.columnCount }, () => []);
-  for (const ball of state.balls) {
-    if (ball.vx <= 0) continue;
-    const zoneIndex = Math.max(0, Math.min(state.columnCount - 1, Math.floor(ball.x / state.config.zoneWidth)));
-    zoneBalls[zoneIndex].push(ball);
+  if (engine) {
+    const data = engine.data;
+    const V = engine.varsPerBall;
+    for (let i = 0, idx = 0; i < engine.ballCount; i += 1, idx += V) {
+      const vx = data[idx + 2];
+      if (vx <= 0) continue;
+      const x = data[idx];
+      const zoneIndex = Math.max(0, Math.min(state.columnCount - 1, Math.floor(x / state.config.zoneWidth)));
+      zoneBalls[zoneIndex].push(x);
+    }
   }
 
   for (const player of state.players) {
@@ -654,7 +705,7 @@ function updateBots(delta) {
 
     const inZoneBalls = zoneBalls[player.zoneIndex];
     if (inZoneBalls.length > 0) {
-      target = inZoneBalls[0].x;
+      target = inZoneBalls[0];
     }
 
     const zoneLeft = player.zoneIndex * state.config.zoneWidth;
@@ -896,24 +947,32 @@ function render() {
 
   const visibleWorldLeft = state.cameraX;
   const visibleWorldRight = state.cameraX + cssWidth / viewScale;
-  ctx.fillStyle = '#fff';
-  ctx.beginPath();
-  for (const ball of state.balls) {
-    if (ball.x + ball.radius < visibleWorldLeft || ball.x - ball.radius > visibleWorldRight) {
-      continue;
+  const engine = state.ballEngine;
+  if (engine && engine.ballCount > 0) {
+    const data = engine.data;
+    const V = engine.varsPerBall;
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    for (let i = 0, idx = 0; i < engine.ballCount; i += 1, idx += V) {
+      const x = data[idx];
+      const y = data[idx + 1];
+      if (x + state.config.ballRadius < visibleWorldLeft || x - state.config.ballRadius > visibleWorldRight) {
+        continue;
+      }
+      ctx.moveTo(x + state.config.ballRadius, y);
+      ctx.arc(x, y, state.config.ballRadius, 0, Math.PI * 2);
     }
-    ctx.moveTo(ball.x + ball.radius, ball.y);
-    ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+    ctx.fill();
   }
-  ctx.fill();
 
   ctx.restore();
   drawMenuOverlay(cssWidth, cssHeight, viewScale, state.cameraX, worldHeight);
 }
 
 function refreshUI() {
+  const currentBallCount = state.ballEngine ? state.ballEngine.ballCount : 0;
   if (playerCountEl) playerCountEl.textContent = state.players.length;
-  if (ballCountEl) ballCountEl.textContent = state.balls.length;
+  if (ballCountEl) ballCountEl.textContent = currentBallCount;
   playerListEl.innerHTML = '';
   for (const player of state.players) {
     const item = document.createElement('div');
@@ -943,10 +1002,11 @@ function updateUI() {
     const localPlayer = state.players.find((player) => player.isLocal);
     state.currentPlayerId = localPlayer ? localPlayer.id : state.players[0].id;
   }
+  const currentBallCount = state.ballEngine ? state.ballEngine.ballCount : 0;
   if (playerCountEl) playerCountEl.textContent = state.players.length;
-  if (ballCountEl) ballCountEl.textContent = state.balls.length;
+  if (ballCountEl) ballCountEl.textContent = currentBallCount;
   if (canvasPlayerCountEl) canvasPlayerCountEl.textContent = state.players.length;
-  if (canvasBallCountEl) canvasBallCountEl.textContent = state.balls.length;
+  if (canvasBallCountEl) canvasBallCountEl.textContent = currentBallCount;
   refreshUI();
   resizeCanvas();
 }
@@ -1129,6 +1189,8 @@ function setup() {
   ballIntervalInput.min = String(BALL_INTERVAL_MIN_SEC);
   ballIntervalInput.max = String(BALL_INTERVAL_MAX_SEC);
   ballIntervalInput.step = String(BALL_INTERVAL_STEP_SEC);
+
+  state.ballEngine = new BallEngine(10000);
 
   resizeCanvas();
   for (let index = 0; index < 199; index += 1) {
