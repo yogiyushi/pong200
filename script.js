@@ -615,6 +615,7 @@ function createPlayer({ name, flag, color, side, isBot = false, isLocal = false 
     flag: flag || '',
     color: color || '#fff',
     side,
+    zoneIndex: 0,
     score: 0,
     lastHit: 0,
     misses: 0,
@@ -992,7 +993,7 @@ function updateBots(delta) {
   const engine = state.ballEngine;
   const ballCount = getBallCount();
   const data = getBallData();
-  const zoneBalls = Array.from({ length: state.columnCount }, () => []);
+  const zoneBalls = Array.from({ length: Math.max(1, state.columnCount) }, () => []);
   if (ballCount > 0) {
     const V = engine ? engine.varsPerBall : 4;
     for (let i = 0, idx = 0; i < ballCount; i += 1, idx += V) {
@@ -1009,7 +1010,7 @@ function updateBots(delta) {
     const paddle = playerPaddleBounds(player);
     let target = paddle.x + paddle.width / 2;
 
-    const inZoneBalls = zoneBalls[player.zoneIndex];
+    const inZoneBalls = zoneBalls[player.zoneIndex] || [];
     if (inZoneBalls.length > 0) {
       target = inZoneBalls[0];
     }
@@ -1123,7 +1124,7 @@ function drawMenuOverlay(cssWidth, cssHeight, viewScale, cameraX, worldHeight) {
   ctx.font = '9px ui-monospace, monospace';
   ctx.textBaseline = 'middle';
 
-  for (let zoneIndex = 0; zoneIndex < state.columnCount; zoneIndex += 1) {
+  for (let zoneIndex = visibleZoneStart; zoneIndex < visibleZoneEnd; zoneIndex += 1) {
     const zoneLeft = (zoneIndex * state.config.zoneWidth - cameraX) * viewScale;
     const zoneRight = zoneLeft + state.config.zoneWidth * viewScale;
     const topPlayer = getZonePlayer(zoneIndex, 'top');
