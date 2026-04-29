@@ -66,9 +66,9 @@ const state = {
   }
 };
 
-const BALL_INTERVAL_MIN_SEC = 0.1;
+const BALL_INTERVAL_MIN_SEC = 0.01;
 const BALL_INTERVAL_MAX_SEC = 10;
-const BALL_INTERVAL_STEP_SEC = 0.1;
+const BALL_INTERVAL_STEP_SEC = 0.01;
 const CANVAS_MENU_HEIGHT = 16;
 const SETTINGS_STORAGE_KEY = 'pong200.settings';
 const PLAYER_ICON_SIZE = 14;
@@ -135,8 +135,8 @@ function applySettingsToInputs() {
 function setBallIntervalSeconds(seconds) {
   const clamped = clamp(seconds, BALL_INTERVAL_MIN_SEC, BALL_INTERVAL_MAX_SEC);
   state.config.spawnInterval = Math.round(clamped * 1000);
-  ballIntervalInput.value = clamped.toFixed(1);
-  ballIntervalLabel.textContent = `${clamped.toFixed(1)}s`;
+  ballIntervalInput.value = clamped.toFixed(2);
+  ballIntervalLabel.textContent = `${clamped.toFixed(2).replace('.', ',')}s`;
 }
 
 // ably
@@ -606,10 +606,9 @@ function drawMenuOverlay(cssWidth, cssHeight, viewScale, cameraX, worldHeight) {
     const zoneLeft = (zoneIndex * state.config.zoneWidth - cameraX) * viewScale;
     const zoneCenterX = zoneLeft + (state.config.zoneWidth * viewScale) / 2;
     const zoneCenterY = topY + (courtHeight / 2);
-    const zoneLabelSize = Math.max(12, 60 * viewScale);
     ctx.fillStyle = 'rgba(255,255,255,0.05)';
     ctx.textAlign = 'center';
-    ctx.font = `800 ${zoneLabelSize}px "Verdana Black", Verdana, sans-serif`;
+    ctx.font = '800 1rem Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
     ctx.fillText(String(zoneIndex + 1), zoneCenterX, zoneCenterY);
   }
 
