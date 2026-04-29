@@ -630,7 +630,9 @@ function updateBalls(delta) {
       }
     }
 
-    if (ball.x - ball.radius < state.worldWidth + 60) {
+    const outOfRangeHorizontally = ball.x + ball.radius < -60 || ball.x - ball.radius > state.worldWidth + 60;
+    const outOfRangeVertically = ball.y + ball.radius < -60 || ball.y - ball.radius > height + 60;
+    if (!outOfRangeHorizontally && !outOfRangeVertically) {
       aliveBalls.push(ball);
     }
   }
@@ -894,15 +896,16 @@ function render() {
 
   const visibleWorldLeft = state.cameraX;
   const visibleWorldRight = state.cameraX + cssWidth / viewScale;
+  ctx.fillStyle = '#fff';
+  ctx.beginPath();
   for (const ball of state.balls) {
     if (ball.x + ball.radius < visibleWorldLeft || ball.x - ball.radius > visibleWorldRight) {
       continue;
     }
-    ctx.fillStyle = '#fff';
-    ctx.beginPath();
+    ctx.moveTo(ball.x + ball.radius, ball.y);
     ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
-    ctx.fill();
   }
+  ctx.fill();
 
   ctx.restore();
   drawMenuOverlay(cssWidth, cssHeight, viewScale, state.cameraX, worldHeight);
