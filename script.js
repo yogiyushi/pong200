@@ -10,7 +10,6 @@ const playerNameInput = document.getElementById('playerName');
 const playerColorInput = document.getElementById('playerColor');
 const joinButton = document.getElementById('joinButton');
 const addBotButton = document.getElementById('addBotButton');
-const resetButton = document.getElementById('resetButton');
 const cameraZoomInput = document.getElementById('cameraZoom');
 const cameraZoomLabel = document.getElementById('cameraZoomLabel');
 const ballIntervalInput = document.getElementById('ballInterval');
@@ -45,6 +44,8 @@ let glPixelRatio = 1;
 let ballDataBuffer = null;
 let ballDataView = null;
 let paddleState = null;
+
+//localstorgae.clear();
 
 const state = {
   players: [],
@@ -180,7 +181,7 @@ function setCameraZoom(value, save = true) {
 }
 
 function setStartingBotCount(count) {
-  const value = clamp(Math.round(count), 0, 300);
+  const value = clamp(Math.round(count), 0, 1000);
   state.config.startingBotCount = value;
   startingBotCountInput.value = String(value);
   startingBotCountLabel.textContent = String(value);
@@ -617,7 +618,7 @@ function createPlayer({ name, flag, color, side, isBot = false, isLocal = false 
   };
 }
 
-function addPlayer(options) {
+function addPlayer(options, skipRefresh = false) {
   const player = createPlayer({
     side: options.side || chooseSide(),
     name: options.name,
@@ -630,13 +631,31 @@ function addPlayer(options) {
   if (options.isLocal) {
     state.currentPlayerId = player.id;
   }
-  syncWorld();
-  updateUI();
+  if (!skipRefresh) {
+    syncWorld();
+    updateUI();
+  }
   return player;
 }
 
-function addBot() {
-  addPlayer({ isBot: true });
+function addBot(skipRefresh = false) {
+  addPlayer({ isBot: true }, skipRefresh);
+}
+
+function addBots(count, batchSize = 50, callback) {
+  let added = 0;
+  const addNextBatch = () => {
+    const end = Math.min(added + batchSize, count);
+    for (; added < end; added += 1) {
+      addBot(true);
+    }
+    if (added < count) {
+      requestAnimationFrame(addNextBatch);
+    } else {
+      callback?.();
+    }
+  };
+  addNextBatch();
 }
 
 function resetGame() {
@@ -673,7 +692,7 @@ function movePlayerToStartLevel(player) {
 function restartGame(localOptions) {
   resetGame();
   for (let index = 0; index < state.config.startingBotCount; index += 1) {
-    addBot();
+    addBot(true);
   }
   addPlayer({
     isLocal: true,
@@ -1062,7 +1081,12 @@ function drawMenuOverlay(cssWidth, cssHeight, viewScale, cameraX, worldHeight) {
   ctx.fillRect(0, overlayTopY, cssWidth, menuHeight);
   ctx.fillRect(0, overlayBottomY, cssWidth, menuHeight);
 
-  for (let zoneIndex = 0; zoneIndex < state.columnCount; zoneIndex += 1) {
+  const visibleWorldLeft = cameraX;
+  const visibleWorldRight = cameraX + cssWidth / viewScale;
+  const visibleZoneStart = Math.max(0, Math.floor((visibleWorldLeft - 20) / state.config.zoneWidth));
+  const visibleZoneEnd = Math.min(state.columnCount, Math.ceil((visibleWorldRight + 20) / state.config.zoneWidth));
+
+  for (let zoneIndex = visibleZoneStart; zoneIndex < visibleZoneEnd; zoneIndex += 1) {
     const zoneLeft = (zoneIndex * state.config.zoneWidth - cameraX) * viewScale;
     const topFlash = getMenuFlashAlpha('top', zoneIndex);
     const bottomFlash = getMenuFlashAlpha('bottom', zoneIndex);
@@ -1076,13 +1100,13 @@ function drawMenuOverlay(cssWidth, cssHeight, viewScale, cameraX, worldHeight) {
     }
   }
 
-  for (let zoneIndex = 0; zoneIndex < state.columnCount; zoneIndex += 1) {
+  ctx.fillStyle = 'rgba(255,255,255,0.5)';
+  ctx.textAlign = 'center';
+  ctx.font = '400 1rem Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+  for (let zoneIndex = visibleZoneStart; zoneIndex < visibleZoneEnd; zoneIndex += 1) {
     const zoneLeft = (zoneIndex * state.config.zoneWidth - cameraX) * viewScale;
     const zoneCenterX = zoneLeft + (state.config.zoneWidth * viewScale) / 2;
     const zoneCenterY = topY + (courtHeight / 2);
-    ctx.fillStyle = 'rgba(255,255,255,0.5)';
-    ctx.textAlign = 'center';
-    ctx.font = '400 1rem Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
     ctx.fillText(String(zoneIndex + 1), zoneCenterX, zoneCenterY);
   }
 
@@ -1190,10 +1214,14 @@ function render() {
   ctx.fillStyle = '#212121';
   ctx.fillRect(0, 0, state.worldWidth, worldHeight);
 
-  // maincolor court lines
+  const visibleWorldLeft = state.cameraX;
+  const visibleWorldRight = state.cameraX + cssWidth / viewScale;
+  const visibleZoneStart = Math.max(0, Math.floor((visibleWorldLeft - 20) / state.config.zoneWidth));
+  const visibleZoneEnd = Math.min(state.columnCount, Math.ceil((visibleWorldRight + 20) / state.config.zoneWidth));
+
   ctx.strokeStyle = '#444444';
   ctx.lineWidth = 1;
-  for (let index = 0; index <= state.columnCount; index++) {
+  for (let index = visibleZoneStart; index <= visibleZoneEnd; index += 1) {
     const x = index * state.config.zoneWidth;
     ctx.beginPath();
     ctx.moveTo(x, 0);
@@ -1201,13 +1229,13 @@ function render() {
     ctx.stroke();
   }
 
-// maincolor court background
   ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-  for (let index = 0; index < state.columnCount; index++) {
+  for (let index = visibleZoneStart; index < visibleZoneEnd; index += 1) {
     ctx.fillRect(index * state.config.zoneWidth, 0, state.config.zoneWidth, worldHeight);
   }
 
   for (const player of state.players) {
+    if (player.zoneIndex < visibleZoneStart || player.zoneIndex >= visibleZoneEnd) continue;
     const zoneLeft = player.zoneIndex * state.config.zoneWidth;
     const zoneRight = zoneLeft + state.config.zoneWidth;
     const isCurrent = player.id === state.currentPlayerId;
@@ -1226,7 +1254,6 @@ function render() {
       ctx.lineWidth = 2;
       ctx.strokeRect(paddle.x + 1, paddle.y + 1, paddle.width - 2, paddle.height - 2);
     }
-
   }
 
   if (gl) {
@@ -1310,7 +1337,6 @@ function attachEvents() {
     });
   });
   addBotButton.addEventListener('click', addBot);
-  resetButton.addEventListener('click', resetGame);
 
   playerNameInput.addEventListener('input', saveSettings);
 
@@ -1583,19 +1609,25 @@ function setup() {
   gl = initWebGL(state.config.maxBallCount);
 
   resizeCanvas();
-  for (let index = 0; index < state.config.startingBotCount; index += 1) {
-    addBot();
+  const startLocalPlayer = () => {
+    addPlayer({
+      isLocal: true,
+      name: playerNameInput.value.trim() || 'You',
+      flag: '',
+      color: playerColorInput.value
+    });
+    spawnBall();
+    updateUI();
+    canvas.focus();
+    requestAnimationFrame(gameLoop);
+  };
+
+  const botCount = state.config.startingBotCount;
+  if (botCount > 0) {
+    addBots(botCount, 50, startLocalPlayer);
+  } else {
+    startLocalPlayer();
   }
-  addPlayer({
-    isLocal: true,
-    name: playerNameInput.value.trim() || 'You',
-    flag: '',
-    color: playerColorInput.value
-  });
-  spawnBall();
-  updateUI();
-  canvas.focus();
-  requestAnimationFrame(gameLoop);
 }
 
 setup();
