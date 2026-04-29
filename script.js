@@ -36,6 +36,9 @@ const gamePanel = document.querySelector('.game-panel');
 const state = {
   players: [],
   ballEngine: null,
+  ballWorker: null,
+  ballWorkerData: new Float32Array(0),
+  ballWorkerCount: 0,
   currentPlayerId: null,
   lastTick: performance.now(),
   nextBallAt: performance.now() + 5000,
@@ -154,6 +157,15 @@ function setBallIntervalSeconds(seconds) {
   ballIntervalLabel.textContent = `${clamped.toFixed(precision).replace('.', ',')}s`;
 }
 
+function setCameraZoom(value, save = true) {
+  const clamped = clamp(value, 0.1, 1);
+  state.config.zoomLevel = clamped;
+  cameraZoomInput.value = String(clamped);
+  cameraZoomLabel.textContent = `${Math.round(clamped * 100)}%`;
+  if (save) saveSettings();
+  render();
+}
+
 function setStartingBotCount(count) {
   const value = clamp(Math.round(count), 0, 300);
   state.config.startingBotCount = value;
@@ -170,6 +182,124 @@ function createBallEngine(maxBalls) {
     engine.data.set(previous.data.subarray(0, copyCount * previous.varsPerBall));
   }
   return engine;
+}
+
+const BALL_WORKER_PATH = 'ballWorker.js';
+
+function initBallWorker(maxBalls) {
+  if (!window.Worker) return null;
+  const worker = new Worker(BALL_WORKER_PATH);
+  worker.onmessage = (event) => {
+    const message = event.data;
+    if (message.type === 'updated') {
+      state.ballWorkerCount = message.ballCount;
+      state.ballWorkerData = new Float32Array(message.data);
+      if (Array.isArray(message.flashes)) {
+        for (const flash of message.flashes) {
+          state.menuFlash[flash.side][flash.zoneIndex] = 1;
+        }
+      }
+      if (Array.isArray(message.events)) {
+        handleBallWorkerEvents(message.events);
+      }
+    }
+  };
+  worker.postMessage({
+    type: 'init',
+    maxBalls
+  });
+  return worker;
+}
+
+function handleBallWorkerEvents(events) {
+  if (!Array.isArray(events)) return;
+  let changed = false;
+  for (const event of events) {
+    if (event.type === 'hit') {
+      const player = state.players.find((item) => item.id === event.playerId);
+      if (player) {
+        player.score += 1;
+        player.lastHit = performance.now();
+        changed = true;
+      }
+    } else if (event.type === 'eliminate') {
+      const player = state.players.find((item) => item.id === event.playerId);
+      if (player) {
+        eliminatePlayer(player);
+        changed = true;
+      }
+    }
+  }
+  if (changed) updateUI();
+}
+
+function getBallCount() {
+  return state.ballWorker ? state.ballWorkerCount : state.ballEngine ? state.ballEngine.ballCount : 0;
+}
+
+function getBallData() {
+  return state.ballWorker ? state.ballWorkerData : state.ballEngine ? state.ballEngine.data : new Float32Array(0);
+}
+
+function sendBallWorkerUpdate(delta) {
+  if (!state.ballWorker) return;
+  const { height } = getCanvasSize();
+  const topPaddleBottom = CANVAS_MENU_HEIGHT + 1 + state.config.paddleHeight;
+  const bottomPaddleTop = height - state.config.paddleHeight - CANVAS_MENU_HEIGHT - 1;
+  const paddles = {
+    top: [],
+    bottom: []
+  };
+  for (const player of state.players) {
+    const paddle = playerPaddleBounds(player);
+    paddles[player.side].push({
+      id: player.id,
+      side: player.side,
+      zoneIndex: player.zoneIndex,
+      x: paddle.x,
+      y: paddle.y,
+      width: paddle.width,
+      height: paddle.height
+    });
+  }
+  state.ballWorker.postMessage({
+    type: 'update',
+    delta,
+    worldWidth: state.worldWidth,
+    height,
+    radius: state.config.ballRadius,
+    zoneWidth: state.config.zoneWidth,
+    topPaddleBottom,
+    bottomPaddleTop,
+    menuHeight: CANVAS_MENU_HEIGHT,
+    paddles,
+    config: {
+      maxBallSpeed: state.config.maxBallSpeed
+    }
+  });
+}
+
+function sendBallWorkerSpawnBall(x, y, minSpeed, maxSpeed) {
+  if (!state.ballWorker) return;
+  state.ballWorker.postMessage({
+    type: 'spawnBall',
+    x,
+    y,
+    minSpeed,
+    maxSpeed
+  });
+}
+
+function resetBallWorker() {
+  if (!state.ballWorker) return;
+  state.ballWorker.postMessage({ type: 'reset' });
+  state.ballWorkerCount = 0;
+  state.ballWorkerData = new Float32Array(0);
+}
+
+function resizeBallWorker(maxBalls) {
+  if (!state.ballWorker) return;
+  state.ballWorker.postMessage({ type: 'resize', maxBalls });
 }
 
 // ably
@@ -401,6 +531,7 @@ function addBot() {
 function resetGame() {
   state.players = [];
   state.ballEngine?.reset();
+  resetBallWorker();
   state.currentPlayerId = null;
   state.nextBallAt = performance.now() + state.config.spawnInterval;
   updateUI();
@@ -478,15 +609,18 @@ function syncWorld() {
 
 function spawnBall() {
   if (state.players.length === 0) return;
-  const engine = state.ballEngine;
-  if (!engine) return;
-  if (engine.ballCount >= state.config.maxBallCount) return;
+  const currentBallCount = getBallCount();
+  if (currentBallCount >= state.config.maxBallCount) return;
 
   const { height } = getCanvasSize();
   const minY = state.config.topInset + CANVAS_MENU_HEIGHT + state.config.ballRadius + 12;
   const maxY = height - state.config.bottomInset - CANVAS_MENU_HEIGHT - state.config.ballRadius - 12;
   const startY = minY + Math.random() * (maxY - minY);
-  state.ballEngine.spawnBall(8, startY, state.config.minBallSpeed * 10, state.config.maxBallSpeed * 10);
+  if (state.ballWorker) {
+    sendBallWorkerSpawnBall(8, startY, state.config.minBallSpeed * 10, state.config.maxBallSpeed * 10);
+  } else {
+    state.ballEngine.spawnBall(8, startY, state.config.minBallSpeed * 10, state.config.maxBallSpeed * 10);
+  }
   updateUI();
 }
 
@@ -716,11 +850,12 @@ function updateBalls(delta) {
 
 function updateBots(delta) {
   const engine = state.ballEngine;
+  const ballCount = getBallCount();
+  const data = getBallData();
   const zoneBalls = Array.from({ length: state.columnCount }, () => []);
-  if (engine) {
-    const data = engine.data;
-    const V = engine.varsPerBall;
-    for (let i = 0, idx = 0; i < engine.ballCount; i += 1, idx += V) {
+  if (ballCount > 0) {
+    const V = engine ? engine.varsPerBall : 4;
+    for (let i = 0, idx = 0; i < ballCount; i += 1, idx += V) {
       const vx = data[idx + 2];
       if (vx <= 0) continue;
       const x = data[idx];
@@ -767,7 +902,11 @@ function updateGame(delta) {
       );
     }
   }
-  updateBalls(delta);
+  if (state.ballWorker) {
+    sendBallWorkerUpdate(delta);
+  } else {
+    updateBalls(delta);
+  }
   updateBots(delta);
   for (const side of ['top', 'bottom']) {
     for (const zoneIndex of Object.keys(state.menuFlash[side])) {
@@ -830,9 +969,9 @@ function drawMenuOverlay(cssWidth, cssHeight, viewScale, cameraX, worldHeight) {
     const zoneLeft = (zoneIndex * state.config.zoneWidth - cameraX) * viewScale;
     const zoneCenterX = zoneLeft + (state.config.zoneWidth * viewScale) / 2;
     const zoneCenterY = topY + (courtHeight / 2);
-    ctx.fillStyle = 'rgba(255,255,255,0.05)';
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
     ctx.textAlign = 'center';
-    ctx.font = '800 1rem Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.font = '400 1rem Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
     ctx.fillText(String(zoneIndex + 1), zoneCenterX, zoneCenterY);
   }
 
@@ -981,13 +1120,13 @@ function render() {
 
   const visibleWorldLeft = state.cameraX;
   const visibleWorldRight = state.cameraX + cssWidth / viewScale;
-  const engine = state.ballEngine;
-  if (engine && engine.ballCount > 0) {
-    const data = engine.data;
-    const V = engine.varsPerBall;
+  const ballCount = getBallCount();
+  const data = getBallData();
+  if (ballCount > 0) {
+    const V = 4;
     const size = state.config.ballRadius * 2;
     ctx.fillStyle = '#fff';
-    for (let i = 0, idx = 0; i < engine.ballCount; i += 1, idx += V) {
+    for (let i = 0, idx = 0; i < ballCount; i += 1, idx += V) {
       const x = data[idx];
       const y = data[idx + 1];
       if (x + state.config.ballRadius < visibleWorldLeft || x - state.config.ballRadius > visibleWorldRight) {
@@ -1002,7 +1141,7 @@ function render() {
 }
 
 function refreshUI() {
-  const currentBallCount = state.ballEngine ? state.ballEngine.ballCount : 0;
+  const currentBallCount = getBallCount();
   if (playerCountEl) playerCountEl.textContent = state.players.length;
   if (ballCountEl) ballCountEl.textContent = currentBallCount;
   playerListEl.innerHTML = '';
@@ -1034,7 +1173,7 @@ function updateUI() {
     const localPlayer = state.players.find((player) => player.isLocal);
     state.currentPlayerId = localPlayer ? localPlayer.id : state.players[0].id;
   }
-  const currentBallCount = state.ballEngine ? state.ballEngine.ballCount : 0;
+  const currentBallCount = getBallCount();
   if (playerCountEl) playerCountEl.textContent = state.players.length;
   if (ballCountEl) ballCountEl.textContent = currentBallCount;
   if (canvasPlayerCountEl) canvasPlayerCountEl.textContent = state.players.length;
@@ -1069,11 +1208,65 @@ function attachEvents() {
   playerNameInput.addEventListener('input', saveSettings);
 
   cameraZoomInput.addEventListener('input', () => {
-    state.config.zoomLevel = Number(cameraZoomInput.value);
-    cameraZoomLabel.textContent = `${Math.round(state.config.zoomLevel * 100)}%`;
-    render();
-    saveSettings();
+    setCameraZoom(Number(cameraZoomInput.value));
   });
+
+  let pinchPointers = new Map();
+  let pinchStartDistance = 0;
+  let pinchStartZoom = state.config.zoomLevel;
+
+  const getPointerDistance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+
+  const updatePinchZoom = () => {
+    if (pinchPointers.size !== 2) return;
+    const [first, second] = Array.from(pinchPointers.values());
+    const distance = getPointerDistance(first, second);
+    if (!pinchStartDistance) {
+      pinchStartDistance = distance;
+      pinchStartZoom = state.config.zoomLevel;
+      return;
+    }
+    if (pinchStartDistance > 0) {
+      const ratio = distance / pinchStartDistance;
+      setCameraZoom(pinchStartZoom * ratio);
+    }
+  };
+
+  const updateZoomFromWheel = (event) => {
+    event.preventDefault();
+    const delta = event.deltaY;
+    const step = event.shiftKey ? 0.02 : 0.05;
+    const direction = delta > 0 ? -1 : 1;
+    setCameraZoom(state.config.zoomLevel + direction * step);
+  };
+
+  gamePanel.addEventListener('wheel', updateZoomFromWheel, { passive: false });
+  gamePanel.addEventListener('pointerdown', (event) => {
+    if (event.pointerType !== 'touch') return;
+    pinchPointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (pinchPointers.size === 2) {
+      pinchStartDistance = 0;
+      pinchStartZoom = state.config.zoomLevel;
+    }
+  });
+
+  gamePanel.addEventListener('pointermove', (event) => {
+    if (event.pointerType !== 'touch') return;
+    if (!pinchPointers.has(event.pointerId)) return;
+    pinchPointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    updatePinchZoom();
+  });
+
+  const endPinch = (event) => {
+    if (event.pointerType !== 'touch') return;
+    pinchPointers.delete(event.pointerId);
+    if (pinchPointers.size < 2) {
+      pinchStartDistance = 0;
+    }
+  };
+
+  gamePanel.addEventListener('pointerup', endPinch);
+  gamePanel.addEventListener('pointercancel', endPinch);
 
   ballIntervalInput.addEventListener('input', () => {
     setBallIntervalSeconds(Number(ballIntervalInput.value));
@@ -1115,6 +1308,7 @@ function attachEvents() {
     state.config.maxBallCount = clamp(Number(maxBallCountInput.value), 1, 10000);
     maxBallCountLabel.textContent = String(state.config.maxBallCount);
     state.ballEngine = createBallEngine(state.config.maxBallCount);
+    resizeBallWorker(state.config.maxBallCount);
     saveSettings();
   });
 
@@ -1252,6 +1446,7 @@ function setup() {
   ballIntervalInput.step = String(BALL_INTERVAL_STEP_SEC);
 
   state.ballEngine = createBallEngine(state.config.maxBallCount);
+  state.ballWorker = initBallWorker(state.config.maxBallCount);
 
   resizeCanvas();
   for (let index = 0; index < state.config.startingBotCount; index += 1) {
