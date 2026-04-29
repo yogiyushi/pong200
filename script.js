@@ -6,7 +6,6 @@ const canvasPlayerCountEl = document.getElementById('canvasPlayerCount');
 const canvasBallCountEl = document.getElementById('canvasBallCount');
 const playerListEl = document.getElementById('playerList');
 const playerNameInput = document.getElementById('playerName');
-const playerFlagInput = document.getElementById('playerFlag');
 const playerColorInput = document.getElementById('playerColor');
 const joinButton = document.getElementById('joinButton');
 const addBotButton = document.getElementById('addBotButton');
@@ -28,19 +27,6 @@ const botPaddleSizeLabel = document.getElementById('botPaddleSizeLabel');
 const optionsToggle = document.getElementById('optionsToggle');
 const optionsMenu = document.getElementById('optionsMenu');
 const menuFlipView = document.getElementById('menuFlipView');
-
-const FLAG_OPTIONS = [
-  { value: '', label: 'None' },
-  { value: '🇺🇸', label: 'USA' },
-  { value: '🇬🇧', label: 'UK' },
-  { value: '🇯🇵', label: 'Japan' },
-  { value: '🇧🇷', label: 'Brazil' },
-  { value: '🇩🇪', label: 'Germany' },
-  { value: '🇫🇷', label: 'France' },
-  { value: '🇰🇷', label: 'Korea' },
-  { value: '🇳🇱', label: 'Netherlands' },
-  { value: '🇿🇦', label: 'South Africa' }
-];
 
 const state = {
   players: [],
@@ -104,7 +90,6 @@ function saveSettings() {
     botPaddleSize: Number(botPaddleSizeInput.value),
     flipTopView: menuFlipView.checked,
     playerName: playerNameInput.value,
-    playerFlag: playerFlagInput.value,
     playerColor: playerColorInput.value
   };
   localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
@@ -124,7 +109,6 @@ function loadSettings() {
     if (settings.botPaddleSize != null) state.config.botPaddleSize = Number(settings.botPaddleSize);
     if (settings.flipTopView != null) state.config.flipTopView = Boolean(settings.flipTopView);
     if (settings.playerName != null) playerNameInput.value = settings.playerName;
-    if (settings.playerFlag != null) playerFlagInput.value = settings.playerFlag;
     if (settings.playerColor != null) playerColorInput.value = settings.playerColor;
   } catch (error) {
     console.warn('Could not load saved settings:', error);
@@ -832,21 +816,12 @@ function resizeCanvas() {
   render();
 }
 
-function initFlags() {
-  for (const item of FLAG_OPTIONS) {
-    const option = document.createElement('option');
-    option.value = item.value;
-    option.textContent = item.label;
-    playerFlagInput.appendChild(option);
-  }
-}
-
 function attachEvents() {
   joinButton.addEventListener('click', () => {
     if (state.currentPlayerId) return;
     addPlayer({
       name: playerNameInput.value.trim() || 'You',
-      flag: playerFlagInput.value,
+      flag: '',
       color: playerColorInput.value,
       isLocal: true
     });
@@ -855,7 +830,6 @@ function attachEvents() {
   resetButton.addEventListener('click', resetGame);
 
   playerNameInput.addEventListener('input', saveSettings);
-  playerFlagInput.addEventListener('change', saveSettings);
 
   cameraZoomInput.addEventListener('input', () => {
     state.config.zoomLevel = Number(cameraZoomInput.value);
@@ -1002,7 +976,6 @@ function gameLoop() {
 }
 
 function setup() {
-  initFlags();
   attachEvents();
   loadSettings();
   applySettingsToInputs();
@@ -1019,7 +992,7 @@ function setup() {
   addPlayer({
     isLocal: true,
     name: playerNameInput.value.trim() || 'You',
-    flag: playerFlagInput.value,
+    flag: '',
     color: playerColorInput.value
   });
   spawnBall();
