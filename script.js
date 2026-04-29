@@ -21,6 +21,10 @@ const maxBallSpeedInput = document.getElementById('maxBallSpeed');
 const maxBallSpeedLabel = document.getElementById('maxBallSpeedLabel');
 const maxBallsFactorInput = document.getElementById('maxBallsFactor');
 const maxBallsFactorLabel = document.getElementById('maxBallsFactorLabel');
+const playerPaddleSizeInput = document.getElementById('playerPaddleSize');
+const playerPaddleSizeLabel = document.getElementById('playerPaddleSizeLabel');
+const botPaddleSizeInput = document.getElementById('botPaddleSize');
+const botPaddleSizeLabel = document.getElementById('botPaddleSizeLabel');
 const optionsToggle = document.getElementById('optionsToggle');
 const optionsMenu = document.getElementById('optionsMenu');
 const menuFlipView = document.getElementById('menuFlipView');
@@ -51,6 +55,8 @@ const state = {
   config: {
     zoneWidth: 200,
     paddleLength: 40,
+    playerPaddleSize: 40,
+    botPaddleSize: 40,
     paddleHeight: 10,
     paddleInset: 10,
     ballRadius: 3,
@@ -94,6 +100,8 @@ function saveSettings() {
     minBallSpeed: Number(minBallSpeedInput.value),
     maxBallSpeed: Number(maxBallSpeedInput.value),
     maxBallsFactor: Number(maxBallsFactorInput.value),
+    playerPaddleSize: Number(playerPaddleSizeInput.value),
+    botPaddleSize: Number(botPaddleSizeInput.value),
     flipTopView: menuFlipView.checked,
     playerName: playerNameInput.value,
     playerFlag: playerFlagInput.value,
@@ -112,6 +120,8 @@ function loadSettings() {
     if (settings.minBallSpeed != null) state.config.minBallSpeed = Number(settings.minBallSpeed);
     if (settings.maxBallSpeed != null) state.config.maxBallSpeed = Number(settings.maxBallSpeed);
     if (settings.maxBallsFactor != null) state.config.maxBallsFactor = Number(settings.maxBallsFactor);
+    if (settings.playerPaddleSize != null) state.config.playerPaddleSize = Number(settings.playerPaddleSize);
+    if (settings.botPaddleSize != null) state.config.botPaddleSize = Number(settings.botPaddleSize);
     if (settings.flipTopView != null) state.config.flipTopView = Boolean(settings.flipTopView);
     if (settings.playerName != null) playerNameInput.value = settings.playerName;
     if (settings.playerFlag != null) playerFlagInput.value = settings.playerFlag;
@@ -131,6 +141,10 @@ function applySettingsToInputs() {
   maxBallSpeedLabel.textContent = state.config.maxBallSpeed.toFixed(1);
   maxBallsFactorInput.value = String(state.config.maxBallsFactor);
   maxBallsFactorLabel.textContent = String(state.config.maxBallsFactor);
+  playerPaddleSizeInput.value = String(state.config.playerPaddleSize);
+  playerPaddleSizeLabel.textContent = String(state.config.playerPaddleSize);
+  botPaddleSizeInput.value = String(state.config.botPaddleSize);
+  botPaddleSizeLabel.textContent = String(state.config.botPaddleSize);
   menuFlipView.checked = state.config.flipTopView;
 }
 
@@ -335,7 +349,7 @@ function spawnBall() {
 
 function getPlayerBarWidth(player) {
   const fullWidth = state.config.zoneWidth;
-  const defaultWidth = state.config.paddleLength;
+  const defaultWidth = player.isBot ? state.config.botPaddleSize : state.config.playerPaddleSize;
   if (player.isBot) {
     return defaultWidth;
   }
@@ -389,8 +403,49 @@ function hitPaddle(player, ball) {
   const hitX = ball.x - (paddle.x + paddle.width / 2);
   const normalized = clamp(hitX / (paddle.width / 2), -1, 1);
   if ((player.side === 'top' && ball.vy < 0) || (player.side === 'bottom' && ball.vy > 0)) {
-    ball.vy = -ball.vy;
-    ball.vx += normalized * 0.4;
+    const incomingFromLeft = ball.vx > 0;
+    const incomingFromRight = ball.vx < 0;
+    const edgeAngle = (4.5 * Math.PI) / 180;
+    const speed = Math.hypot(ball.vx, ball.vy);
+    if (speed === 0) return;
+
+    let outVx = 0;
+    let outVy = 0;
+    const absVx = Math.abs(ball.vx);
+    const incomingAngle = Math.atan2(Math.abs(ball.vy), absVx);
+
+    if (incomingFromLeft) {
+      if (normalized <= 0) {
+        const xFactor = 1 + 2 * normalized;
+        outVx = xFactor * absVx;
+        outVy = -ball.vy;
+      } else {
+        const bounceAngle = incomingAngle * (1 - normalized) + edgeAngle * normalized;
+        outVx = speed * Math.cos(bounceAngle);
+        outVy = -Math.sign(ball.vy) * speed * Math.sin(bounceAngle);
+      }
+    } else if (incomingFromRight) {
+      if (normalized >= 0) {
+        const xFactor = 1 - 2 * normalized;
+        outVx = -absVx * xFactor;
+        outVy = -ball.vy;
+      } else {
+        const bounceAngle = incomingAngle * (1 + normalized) + edgeAngle * -normalized;
+        outVx = -speed * Math.cos(bounceAngle);
+        outVy = -Math.sign(ball.vy) * speed * Math.sin(bounceAngle);
+      }
+    }
+
+    const edgeBoost = incomingFromLeft
+      ? Math.max(0, normalized)
+      : Math.max(0, -normalized);
+    const boostFactor = 1 + 0.2 * edgeBoost;
+    const maxSpeed = state.config.maxBallSpeed * 10;
+    const finalSpeed = Math.min(speed * boostFactor, maxSpeed);
+    const scale = finalSpeed / speed;
+    ball.vx = outVx * scale;
+    ball.vy = outVy * scale;
+
     ball.y = player.side === 'top'
       ? paddle.y + paddle.height + ball.radius + 1
       : paddle.y - ball.radius - 1;
@@ -481,7 +536,7 @@ function updateBots(delta) {
 
     const zoneLeft = player.zoneIndex * state.config.zoneWidth;
     const zoneRight = zoneLeft + state.config.zoneWidth;
-    player.targetX = clamp(target - state.config.paddleLength / 2, zoneLeft + 4, zoneRight - state.config.paddleLength - 4);
+    player.targetX = clamp(target - paddle.width / 2, zoneLeft + 4, zoneRight - paddle.width - 4);
     const move = (player.targetX - player.paddleX) * Math.min(1, delta * 4);
     player.paddleX += move;
 
@@ -498,11 +553,12 @@ function updateGame(delta) {
     if (direction !== 0) {
       const zoneLeft = current.zoneIndex * state.config.zoneWidth;
       const zoneRight = zoneLeft + state.config.zoneWidth;
+      const paddle = playerPaddleBounds(current);
       const speed = 96;
       current.paddleX = clamp(
         current.paddleX + direction * speed * delta,
         zoneLeft + 4,
-        zoneRight - state.config.paddleLength - 4
+        zoneRight - paddle.width - 4
       );
     }
   }
@@ -850,6 +906,20 @@ function attachEvents() {
     saveSettings();
   });
 
+  playerPaddleSizeInput.addEventListener('input', () => {
+    state.config.playerPaddleSize = clamp(Number(playerPaddleSizeInput.value), 10, 200);
+    playerPaddleSizeLabel.textContent = String(state.config.playerPaddleSize);
+    saveSettings();
+    render();
+  });
+
+  botPaddleSizeInput.addEventListener('input', () => {
+    state.config.botPaddleSize = clamp(Number(botPaddleSizeInput.value), 10, 200);
+    botPaddleSizeLabel.textContent = String(state.config.botPaddleSize);
+    saveSettings();
+    render();
+  });
+
   menuFlipView.addEventListener('change', () => {
     state.config.flipTopView = menuFlipView.checked;
     saveSettings();
@@ -876,10 +946,11 @@ function attachEvents() {
     const rawX = (event.clientX - rect.left) / getViewScale() + state.cameraX;
     const zoneLeft = current.zoneIndex * state.config.zoneWidth;
     const zoneRight = zoneLeft + state.config.zoneWidth;
+    const paddle = playerPaddleBounds(current);
     current.paddleX = clamp(
       rawX,
       zoneLeft + 4,
-      zoneRight - state.config.paddleLength - 4
+      zoneRight - paddle.width - 4
     );
   }
 
