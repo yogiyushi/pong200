@@ -242,8 +242,7 @@ function initWebGL(maxBalls) {
   const positionBuffer = context.createBuffer();
   context.bindBuffer(context.ARRAY_BUFFER, positionBuffer);
   context.bufferData(context.ARRAY_BUFFER, maxBalls * 4 * Float32Array.BYTES_PER_ELEMENT, context.DYNAMIC_DRAW);
-  context.enable(context.BLEND);
-  context.blendFunc(context.SRC_ALPHA, context.ONE_MINUS_SRC_ALPHA);
+  context.disable(context.BLEND);
   context.clearColor(0, 0, 0, 0);
 
   glProgram = program;
