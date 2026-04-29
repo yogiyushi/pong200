@@ -566,9 +566,10 @@ function drawMenuOverlay(cssWidth, cssHeight, viewScale, cameraX, worldHeight) {
     const zoneLeft = (zoneIndex * state.config.zoneWidth - cameraX) * viewScale;
     const zoneCenterX = zoneLeft + (state.config.zoneWidth * viewScale) / 2;
     const zoneCenterY = topY + (courtHeight / 2);
+    const zoneLabelSize = Math.max(12, 60 * viewScale);
     ctx.fillStyle = 'rgba(255,255,255,0.05)';
     ctx.textAlign = 'center';
-    ctx.font = '800 60px "Verdana Black", Verdana, sans-serif';
+    ctx.font = `800 ${zoneLabelSize}px "Verdana Black", Verdana, sans-serif`;
     ctx.fillText(String(zoneIndex + 1), zoneCenterX, zoneCenterY);
   }
 
@@ -602,14 +603,14 @@ function drawMenuOverlay(cssWidth, cssHeight, viewScale, cameraX, worldHeight) {
       const displayName = player.isBot ? 'Bot' : player.name.slice(0, 8);
       ctx.fillStyle = player.color || '#fff';
       ctx.textAlign = 'left';
-      ctx.font = `${Math.max(4, 9 * menuScale)}px ui-monospace, monospace`;
+      ctx.font = `${Math.max(4, 9 * viewScale)}px ui-monospace, monospace`;
       ctx.fillText(displayName, iconX + iconSize + 1, y);
 
       const statsX = zoneRight - padding;
-      ctx.font = `${Math.max(4, 12 * menuScale)}px ui-monospace, monospace`;
+      ctx.font = `${Math.max(4, 12 * viewScale)}px ui-monospace, monospace`;
       ctx.textAlign = 'right';
       ctx.fillText(player.score, statsX, y);
-      ctx.font = `${Math.max(8, 9 * menuScale)}px ui-monospace, monospace`;
+      ctx.font = `${Math.max(8, 9 * viewScale)}px ui-monospace, monospace`;
 
       for (let index = 0; index < 3; index += 1) {
         const alpha = index < (player.misses || 0) ? 0.2 : 0.8;
