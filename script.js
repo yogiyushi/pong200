@@ -6,7 +6,6 @@ const canvasPlayerCountEl = document.getElementById('canvasPlayerCount');
 const canvasBallCountEl = document.getElementById('canvasBallCount');
 const canvasFPSEl = document.getElementById('canvasFPS');
 const canvasFrameTimeEl = document.getElementById('canvasFrameTime');
-const playerListEl = document.getElementById('playerList');
 const playerNameInput = document.getElementById('playerName');
 const playerColorInput = document.getElementById('playerColor');
 const joinButton = document.getElementById('joinButton');
@@ -571,6 +570,10 @@ function getCanvasSize() {
 
 function getCurrentPlayer() {
   return state.players.find((player) => player.id === state.currentPlayerId);
+}
+
+function isOptionsMenuOpen() {
+  return optionsMenu && !optionsMenu.classList.contains('hidden');
 }
 
 function getSideCounts() {
@@ -1256,27 +1259,6 @@ function refreshUI() {
   const currentBallCount = getBallCount();
   if (playerCountEl) playerCountEl.textContent = state.players.length;
   if (ballCountEl) ballCountEl.textContent = currentBallCount;
-  playerListEl.innerHTML = '';
-  for (const player of state.players) {
-    const item = document.createElement('div');
-    item.className = 'player-item';
-
-    const side = document.createElement('div');
-    side.className = 'player-side';
-    side.textContent = player.side;
-
-    const name = document.createElement('span');
-    name.textContent = `${player.flag ? player.flag + ' ' : ''}${player.name}`;
-
-    const score = document.createElement('span');
-    score.textContent = player.score;
-
-    item.append(side, name, score);
-    if (player.id === state.currentPlayerId) {
-      item.style.borderColor = 'rgba(255,255,255,0.28)';
-    }
-    playerListEl.appendChild(item);
-  }
 }
 
 function updateUI() {
@@ -1333,7 +1315,13 @@ function attachEvents() {
   playerNameInput.addEventListener('input', saveSettings);
 
   cameraZoomInput.addEventListener('input', () => {
-    setCameraZoom(Number(cameraZoomInput.value));
+    const value = Number(cameraZoomInput.value);
+    state.config.zoomLevel = value;
+    cameraZoomLabel.textContent = `${Math.round(value * 100)}%`;
+    render();
+  });
+  cameraZoomInput.addEventListener('change', () => {
+    saveSettings();
   });
 
   let pinchPointers = new Map();
@@ -1395,6 +1383,8 @@ function attachEvents() {
 
   ballIntervalInput.addEventListener('input', () => {
     setBallIntervalSeconds(Number(ballIntervalInput.value));
+  });
+  ballIntervalInput.addEventListener('change', () => {
     saveSettings();
   });
 
@@ -1415,6 +1405,8 @@ function attachEvents() {
       maxBallSpeedLabel.textContent = minSpeed.toFixed(1);
     }
     minBallSpeedLabel.textContent = minSpeed.toFixed(1);
+  });
+  minBallSpeedInput.addEventListener('change', () => {
     saveSettings();
   });
   maxBallSpeedInput.addEventListener('input', () => {
@@ -1426,34 +1418,50 @@ function attachEvents() {
       minBallSpeedLabel.textContent = maxSpeed.toFixed(1);
     }
     maxBallSpeedLabel.textContent = maxSpeed.toFixed(1);
+  });
+  maxBallSpeedInput.addEventListener('change', () => {
     saveSettings();
   });
 
-  maxBallCountInput.addEventListener('input', () => {
-    state.config.maxBallCount = clamp(Number(maxBallCountInput.value), 1, 10000);
-    maxBallCountLabel.textContent = String(state.config.maxBallCount);
-    state.ballEngine = createBallEngine(state.config.maxBallCount);
-    resizeBallWorker(state.config.maxBallCount);
+  const applyMaxBallCount = () => {
+    const value = clamp(Number(maxBallCountInput.value), 1, 10000);
+    state.config.maxBallCount = value;
+    maxBallCountInput.value = String(value);
+    maxBallCountLabel.textContent = String(value);
+    state.ballEngine = createBallEngine(value);
+    resizeBallWorker(value);
     saveSettings();
+  };
+
+  maxBallCountInput.addEventListener('input', () => {
+    maxBallCountLabel.textContent = String(clamp(Number(maxBallCountInput.value), 1, 10000));
   });
+  maxBallCountInput.addEventListener('change', applyMaxBallCount);
+  maxBallCountInput.addEventListener('pointerup', applyMaxBallCount);
 
   startingBotCountInput.addEventListener('input', () => {
     setStartingBotCount(Number(startingBotCountInput.value));
+  });
+  startingBotCountInput.addEventListener('change', () => {
     saveSettings();
   });
 
   playerPaddleSizeInput.addEventListener('input', () => {
     state.config.playerPaddleSize = clamp(Number(playerPaddleSizeInput.value), 10, 200);
     playerPaddleSizeLabel.textContent = String(state.config.playerPaddleSize);
-    saveSettings();
     render();
+  });
+  playerPaddleSizeInput.addEventListener('change', () => {
+    saveSettings();
   });
 
   botPaddleSizeInput.addEventListener('input', () => {
     state.config.botPaddleSize = clamp(Number(botPaddleSizeInput.value), 10, 200);
     botPaddleSizeLabel.textContent = String(state.config.botPaddleSize);
-    saveSettings();
     render();
+  });
+  botPaddleSizeInput.addEventListener('change', () => {
+    saveSettings();
   });
 
   menuFlipView.addEventListener('change', () => {
@@ -1467,7 +1475,7 @@ function attachEvents() {
     optionsMenu.setAttribute('aria-hidden', String(isHidden ? 'false' : 'true'));
   });
   window.addEventListener('click', (event) => {
-    if (!optionsMenu.contains(event.target) && event.target !== optionsToggle) {
+    if (!optionsMenu.contains(event.target) && !optionsToggle.contains(event.target)) {
       optionsMenu.classList.add('hidden');
       optionsMenu.setAttribute('aria-hidden', 'true');
     }
