@@ -150,6 +150,7 @@ select {
   border-radius: 16px;
   overflow: hidden;
   min-height: 0;
+  touch-action: none;
 }
 
 /* maincolor canvas background */
@@ -158,6 +159,7 @@ canvas {
   height: 100%;
   display: block;
   background: #010101;
+  touch-action: none;
 }
 .bottom-panel {
   display: flex;

@@ -29,6 +29,9 @@ const botPaddleSizeLabel = document.getElementById('botPaddleSizeLabel');
 const optionsToggle = document.getElementById('optionsToggle');
 const optionsMenu = document.getElementById('optionsMenu');
 const menuFlipView = document.getElementById('menuFlipView');
+const startingBotCountInput = document.getElementById('startingBotCount');
+const startingBotCountLabel = document.getElementById('startingBotCountLabel');
+const gamePanel = document.querySelector('.game-panel');
 
 const state = {
   players: [],
@@ -56,6 +59,7 @@ const state = {
     bottomInset: 10,
     worldLeft: 0,
     zoomLevel: 1,
+    startingBotCount: 199,
     flipTopView: false
   },
   cameraX: 0,
@@ -94,6 +98,7 @@ function saveSettings() {
     maxBallsFactor: Number(maxBallsFactorInput.value),
     playerPaddleSize: Number(playerPaddleSizeInput.value),
     botPaddleSize: Number(botPaddleSizeInput.value),
+    startingBotCount: Number(startingBotCountInput.value),
     flipTopView: menuFlipView.checked,
     playerName: playerNameInput.value,
     playerColor: playerColorInput.value
@@ -113,6 +118,7 @@ function loadSettings() {
     if (settings.maxBallsFactor != null) state.config.maxBallsFactor = Number(settings.maxBallsFactor);
     if (settings.playerPaddleSize != null) state.config.playerPaddleSize = Number(settings.playerPaddleSize);
     if (settings.botPaddleSize != null) state.config.botPaddleSize = Number(settings.botPaddleSize);
+    if (settings.startingBotCount != null) state.config.startingBotCount = Number(settings.startingBotCount);
     if (settings.flipTopView != null) state.config.flipTopView = Boolean(settings.flipTopView);
     if (settings.playerName != null) playerNameInput.value = settings.playerName;
     if (settings.playerColor != null) playerColorInput.value = settings.playerColor;
@@ -135,6 +141,8 @@ function applySettingsToInputs() {
   playerPaddleSizeLabel.textContent = String(state.config.playerPaddleSize);
   botPaddleSizeInput.value = String(state.config.botPaddleSize);
   botPaddleSizeLabel.textContent = String(state.config.botPaddleSize);
+  startingBotCountInput.value = String(state.config.startingBotCount);
+  startingBotCountLabel.textContent = String(state.config.startingBotCount);
   menuFlipView.checked = state.config.flipTopView;
 }
 
@@ -143,6 +151,13 @@ function setBallIntervalSeconds(seconds) {
   state.config.spawnInterval = Math.round(clamped * 1000);
   ballIntervalInput.value = clamped.toFixed(2);
   ballIntervalLabel.textContent = `${clamped.toFixed(2).replace('.', ',')}s`;
+}
+
+function setStartingBotCount(count) {
+  const value = clamp(Math.round(count), 0, 300);
+  state.config.startingBotCount = value;
+  startingBotCountInput.value = String(value);
+  startingBotCountLabel.textContent = String(value);
 }
 
 // ably
@@ -403,7 +418,7 @@ function movePlayerToStartLevel(player) {
 
 function restartGame(localOptions) {
   resetGame();
-  for (let index = 0; index < 199; index += 1) {
+  for (let index = 0; index < state.config.startingBotCount; index += 1) {
     addBot();
   }
   addPlayer({
@@ -956,18 +971,16 @@ function render() {
   if (engine && engine.ballCount > 0) {
     const data = engine.data;
     const V = engine.varsPerBall;
+    const size = state.config.ballRadius * 2;
     ctx.fillStyle = '#fff';
-    ctx.beginPath();
     for (let i = 0, idx = 0; i < engine.ballCount; i += 1, idx += V) {
       const x = data[idx];
       const y = data[idx + 1];
       if (x + state.config.ballRadius < visibleWorldLeft || x - state.config.ballRadius > visibleWorldRight) {
         continue;
       }
-      ctx.moveTo(x + state.config.ballRadius, y);
-      ctx.arc(x, y, state.config.ballRadius, 0, Math.PI * 2);
+      ctx.fillRect(x - state.config.ballRadius, y - state.config.ballRadius, size, size);
     }
-    ctx.fill();
   }
 
   ctx.restore();
@@ -1090,6 +1103,11 @@ function attachEvents() {
     saveSettings();
   });
 
+  startingBotCountInput.addEventListener('input', () => {
+    setStartingBotCount(Number(startingBotCountInput.value));
+    saveSettings();
+  });
+
   playerPaddleSizeInput.addEventListener('input', () => {
     state.config.playerPaddleSize = clamp(Number(playerPaddleSizeInput.value), 10, 200);
     playerPaddleSizeLabel.textContent = String(state.config.playerPaddleSize);
@@ -1138,17 +1156,29 @@ function attachEvents() {
     );
   }
 
-  canvas.addEventListener('pointerdown', (event) => {
+  const dragTarget = gamePanel || canvas;
+  dragTarget.addEventListener('pointerdown', (event) => {
+    event.preventDefault();
+    dragTarget.setPointerCapture(event.pointerId);
     pointerMove(event);
   });
-  canvas.addEventListener('pointermove', (event) => {
+  dragTarget.addEventListener('pointermove', (event) => {
     if (event.buttons !== 1) return;
     pointerMove(event);
   });
-  canvas.addEventListener('pointerup', () => {
+  dragTarget.addEventListener('pointerup', (event) => {
     isDragging = false;
+    if (event.pointerId != null && dragTarget.hasPointerCapture(event.pointerId)) {
+      dragTarget.releasePointerCapture(event.pointerId);
+    }
   });
-  canvas.addEventListener('pointerleave', () => {
+  dragTarget.addEventListener('pointercancel', (event) => {
+    isDragging = false;
+    if (event.pointerId != null && dragTarget.hasPointerCapture(event.pointerId)) {
+      dragTarget.releasePointerCapture(event.pointerId);
+    }
+  });
+  dragTarget.addEventListener('pointerleave', () => {
     isDragging = false;
   });
 
@@ -1209,7 +1239,7 @@ function setup() {
   state.ballEngine = new BallEngine(10000);
 
   resizeCanvas();
-  for (let index = 0; index < 199; index += 1) {
+  for (let index = 0; index < state.config.startingBotCount; index += 1) {
     addBot();
   }
   addPlayer({
