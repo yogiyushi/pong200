@@ -41,11 +41,12 @@ let glCameraXLocation = null;
 let glViewScaleLocation = null;
 let glYOffsetLocation = null;
 let glPixelRatio = 1;
+let glMaxBalls = 0;
 let ballDataBuffer = null;
 let ballDataView = null;
 let paddleState = null;
 
-//localstorgae.clear();
+//localStorage.clear();
 
 const state = {
   players: [],
@@ -135,7 +136,7 @@ function loadSettings() {
     if (settings.maxBallCount != null) state.config.maxBallCount = Number(settings.maxBallCount);
     if (settings.playerPaddleSize != null) state.config.playerPaddleSize = Number(settings.playerPaddleSize);
     if (settings.botPaddleSize != null) state.config.botPaddleSize = Number(settings.botPaddleSize);
-    if (settings.startingBotCount != null) state.config.startingBotCount = Number(settings.startingBotCount);
+    if (settings.startingBotCount != null) state.config.startingBotCount = clamp(Number(settings.startingBotCount), 0, 200);
     if (settings.flipTopView != null) state.config.flipTopView = Boolean(settings.flipTopView);
     if (settings.playerName != null) playerNameInput.value = settings.playerName;
     if (settings.playerColor != null) playerColorInput.value = settings.playerColor;
@@ -181,7 +182,7 @@ function setCameraZoom(value, save = true) {
 }
 
 function setStartingBotCount(count) {
-  const value = clamp(Math.round(count), 0, 1000);
+  const value = clamp(Math.round(count), 0, 200);
   state.config.startingBotCount = value;
   startingBotCountInput.value = String(value);
   startingBotCountLabel.textContent = String(value);
@@ -247,6 +248,7 @@ function initWebGL(maxBalls) {
 
   glProgram = program;
   glPositionBuffer = positionBuffer;
+  glMaxBalls = maxBalls;
   glPositionLocation = context.getAttribLocation(program, 'a_position');
   glPointSizeLocation = context.getUniformLocation(program, 'u_pointSize');
   glResolutionLocation = context.getUniformLocation(program, 'u_resolution');
@@ -258,6 +260,13 @@ function initWebGL(maxBalls) {
   return context;
 }
 
+function resizeWebGL(maxBalls) {
+  if (!gl || !glPositionBuffer) return;
+  gl.bindBuffer(gl.ARRAY_BUFFER, glPositionBuffer);
+  gl.bufferData(gl.ARRAY_BUFFER, maxBalls * 4 * Float32Array.BYTES_PER_ELEMENT, gl.DYNAMIC_DRAW);
+  glMaxBalls = maxBalls;
+}
+
 function drawWebGLBalls(cssWidth, cssHeight, worldHeight, viewScale) {
   if (!gl || !glProgram) return;
   const ballCount = getBallCount();
@@ -265,8 +274,9 @@ function drawWebGLBalls(cssWidth, cssHeight, worldHeight, viewScale) {
   gl.clear(gl.COLOR_BUFFER_BIT);
   if (ballCount === 0) return;
 
+  const count = Math.min(ballCount, glMaxBalls || state.config.maxBallCount);
   const data = getBallData();
-  const floatData = data.subarray(0, ballCount * 4);
+  const floatData = data.subarray(0, count * 4);
   gl.bindBuffer(gl.ARRAY_BUFFER, glPositionBuffer);
   gl.bufferSubData(gl.ARRAY_BUFFER, 0, floatData);
   gl.useProgram(glProgram);
@@ -278,7 +288,7 @@ function drawWebGLBalls(cssWidth, cssHeight, worldHeight, viewScale) {
   gl.uniform1f(glYOffsetLocation, yOffset);
   gl.uniform1f(glPointSizeLocation, Math.max(1, state.config.ballRadius * 2 * viewScale * glPixelRatio));
 
-  gl.drawArrays(gl.POINTS, 0, ballCount);
+  gl.drawArrays(gl.POINTS, 0, count);
 }
 
 function createBallEngine(maxBalls) {
@@ -1282,10 +1292,12 @@ function render() {
   drawMenuOverlay(cssWidth, cssHeight, viewScale, state.cameraX, worldHeight);
 }
 
-function refreshUI() {
+function refreshCounts() {
   const currentBallCount = getBallCount();
   if (playerCountEl) playerCountEl.textContent = state.players.length;
   if (ballCountEl) ballCountEl.textContent = currentBallCount;
+  if (canvasPlayerCountEl) canvasPlayerCountEl.textContent = state.players.length;
+  if (canvasBallCountEl) canvasBallCountEl.textContent = currentBallCount;
 }
 
 function updateUI() {
@@ -1294,12 +1306,6 @@ function updateUI() {
     const localPlayer = state.players.find((player) => player.isLocal);
     state.currentPlayerId = localPlayer ? localPlayer.id : state.players[0].id;
   }
-  const currentBallCount = getBallCount();
-  if (playerCountEl) playerCountEl.textContent = state.players.length;
-  if (ballCountEl) ballCountEl.textContent = currentBallCount;
-  if (canvasPlayerCountEl) canvasPlayerCountEl.textContent = state.players.length;
-  if (canvasBallCountEl) canvasBallCountEl.textContent = currentBallCount;
-  refreshUI();
   resizeCanvas();
 }
 
@@ -1456,6 +1462,7 @@ function attachEvents() {
     maxBallCountLabel.textContent = String(value);
     state.ballEngine = createBallEngine(value);
     resizeBallWorker(value);
+    resizeWebGL(value);
     saveSettings();
   };
 
@@ -1570,6 +1577,22 @@ function attachEvents() {
     state.input.right = false;
   });
 
+  window.addEventListener('visibilitychange', () => {
+    if (!document.hidden) {
+      state.lastTick = performance.now();
+      state.nextBallAt = performance.now() + state.config.spawnInterval;
+      resizeCanvas();
+      updateUI();
+    }
+  });
+
+  window.addEventListener('focus', () => {
+    state.lastTick = performance.now();
+    state.nextBallAt = performance.now() + state.config.spawnInterval;
+    resizeCanvas();
+    updateUI();
+  });
+
   window.addEventListener('resize', resizeCanvas);
   window.addEventListener('load', resizeCanvas);
 }
@@ -1582,6 +1605,9 @@ function gameLoop() {
   state.lastTick = now;
 
   const delta = Math.min(0.018, frameTime / 16.67);
+  if (frameTime > 1000) {
+    state.nextBallAt = now + state.config.spawnInterval;
+  }
   updateGame(delta);
   render();
 
@@ -1589,6 +1615,7 @@ function gameLoop() {
     state.lastFpsUpdate = now;
     if (canvasFPSEl) canvasFPSEl.textContent = String(Math.round(state.fps));
     if (canvasFrameTimeEl) canvasFrameTimeEl.textContent = state.frameTime.toFixed(1);
+    refreshCounts();
   }
 
   requestAnimationFrame(gameLoop);
