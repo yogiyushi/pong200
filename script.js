@@ -133,10 +133,10 @@ function loadSettings() {
     if (settings.spawnIntervalSec != null) state.config.spawnInterval = Math.round(Number(settings.spawnIntervalSec) * 1000);
     if (settings.minBallSpeed != null) state.config.minBallSpeed = Number(settings.minBallSpeed);
     if (settings.maxBallSpeed != null) state.config.maxBallSpeed = Number(settings.maxBallSpeed);
-    if (settings.maxBallCount != null) state.config.maxBallCount = Number(settings.maxBallCount);
+    if (settings.maxBallCount != null) state.config.maxBallCount = clamp(Number(settings.maxBallCount), 1, 100000);
     if (settings.playerPaddleSize != null) state.config.playerPaddleSize = Number(settings.playerPaddleSize);
     if (settings.botPaddleSize != null) state.config.botPaddleSize = Number(settings.botPaddleSize);
-    if (settings.startingBotCount != null) state.config.startingBotCount = clamp(Number(settings.startingBotCount), 0, 200);
+    if (settings.startingBotCount != null) state.config.startingBotCount = clamp(Number(settings.startingBotCount), 0, 1000);
     if (settings.flipTopView != null) state.config.flipTopView = Boolean(settings.flipTopView);
     if (settings.playerName != null) playerNameInput.value = settings.playerName;
     if (settings.playerColor != null) playerColorInput.value = settings.playerColor;
@@ -182,7 +182,7 @@ function setCameraZoom(value, save = true) {
 }
 
 function setStartingBotCount(count) {
-  const value = clamp(Math.round(count), 0, 200);
+  const value = clamp(Math.round(count), 0, 1000);
   state.config.startingBotCount = value;
   startingBotCountInput.value = String(value);
   startingBotCountLabel.textContent = String(value);
@@ -1457,7 +1457,7 @@ function attachEvents() {
   });
 
   const applyMaxBallCount = () => {
-    const value = clamp(Number(maxBallCountInput.value), 1, 10000);
+    const value = clamp(Number(maxBallCountInput.value), 1, 100000);
     state.config.maxBallCount = value;
     maxBallCountInput.value = String(value);
     maxBallCountLabel.textContent = String(value);
@@ -1468,7 +1468,7 @@ function attachEvents() {
   };
 
   maxBallCountInput.addEventListener('input', () => {
-    maxBallCountLabel.textContent = String(clamp(Number(maxBallCountInput.value), 1, 10000));
+    maxBallCountLabel.textContent = String(clamp(Number(maxBallCountInput.value), 1, 100000));
   });
   maxBallCountInput.addEventListener('change', applyMaxBallCount);
   maxBallCountInput.addEventListener('pointerup', applyMaxBallCount);
@@ -1631,6 +1631,10 @@ function setup() {
   ballIntervalInput.min = String(BALL_INTERVAL_MIN_SEC);
   ballIntervalInput.max = String(BALL_INTERVAL_MAX_SEC);
   ballIntervalInput.step = String(BALL_INTERVAL_STEP_SEC);
+  maxBallCountInput.min = '1';
+  maxBallCountInput.max = '100000';
+  startingBotCountInput.min = '0';
+  startingBotCountInput.max = '1000';
 
   state.ballEngine = createBallEngine(state.config.maxBallCount);
   state.ballWorker = initBallWorker(state.config.maxBallCount);
