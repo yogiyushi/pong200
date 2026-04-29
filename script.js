@@ -69,6 +69,7 @@ const state = {
 const BALL_INTERVAL_MIN_SEC = 0.01;
 const BALL_INTERVAL_MAX_SEC = 10;
 const BALL_INTERVAL_STEP_SEC = 0.01;
+const MAX_CANVAS_PIXEL_RATIO = 1.5;
 const CANVAS_MENU_HEIGHT = 16;
 const SETTINGS_STORAGE_KEY = 'pong200.settings';
 const PLAYER_ICON_SIZE = 14;
@@ -159,6 +160,132 @@ function clamp(value, min, max) {
 
 function lerp(start, end, t) {
   return start + (end - start) * t;
+}
+
+class BallEngine {
+  constructor(maxBalls = 10000) {
+    this.maxBalls = maxBalls;
+    this.varsPerBall = 4; // x, y, vx, vy
+    this.data = new Float32Array(this.maxBalls * this.varsPerBall);
+    this.ballCount = 0;
+
+    const N = 1024;
+    this._trigN = N;
+    this._trig = new Float32Array(N * 2);
+    for (let i = 0; i < N; i += 1) {
+      const angle = (i / N) * Math.PI * 2;
+      this._trig[i * 2] = Math.cos(angle);
+      this._trig[i * 2 + 1] = Math.sin(angle);
+    }
+  }
+
+  spawnBall(x, y, speedMin, speedMax) {
+    if (this.ballCount >= this.maxBalls) return;
+    const angleIndex = (Math.random() * this._trigN) | 0;
+    const ux = this._trig[angleIndex * 2];
+    const uy = this._trig[angleIndex * 2 + 1];
+    const speed = Math.random() * (speedMax - speedMin) + speedMin;
+    const idx = this.ballCount * this.varsPerBall;
+    this.data[idx] = x;
+    this.data[idx + 1] = y;
+    this.data[idx + 2] = speed * ux;
+    this.data[idx + 3] = speed * uy;
+    this.ballCount += 1;
+  }
+
+  spawnBallWithAngle(x, y, angleIndex, speed) {
+    if (this.ballCount >= this.maxBalls) return;
+    const idx = this.ballCount * this.varsPerBall;
+    const ux = this._trig[(angleIndex % this._trigN) * 2];
+    const uy = this._trig[(angleIndex % this._trigN) * 2 + 1];
+    this.data[idx] = x;
+    this.data[idx + 1] = y;
+    this.data[idx + 2] = speed * ux;
+    this.data[idx + 3] = speed * uy;
+    this.ballCount += 1;
+  }
+
+  update(deltaTime) {
+    const data = this.data;
+    const V = this.varsPerBall;
+    let idx = 0;
+    for (let i = 0; i < this.ballCount; i += 1) {
+      data[idx] += data[idx + 2] * deltaTime;
+      data[idx + 1] += data[idx + 3] * deltaTime;
+      idx += V;
+    }
+  }
+
+  draw(ctx, size = 2, color = '#fff') {
+    if (this.ballCount === 0) return;
+    ctx.fillStyle = color;
+    const data = this.data;
+    const V = this.varsPerBall;
+    let idx = 0;
+    for (let i = 0; i < this.ballCount; i += 1) {
+      ctx.fillRect(data[idx], data[idx + 1], size, size);
+      idx += V;
+    }
+  }
+
+  reset() {
+    this.ballCount = 0;
+  }
+}
+
+class PaddleEngine {
+  constructor(maxPaddles = 200) {
+    this.maxPaddles = maxPaddles;
+    this.varsPerPaddle = 6; // x, y, width, height, targetX, sideIndex
+    this.data = new Float32Array(this.maxPaddles * this.varsPerPaddle);
+    this.speed = new Float32Array(this.maxPaddles);
+    this.paddleCount = 0;
+  }
+
+  addPaddle(x, y, width, height, targetX, sideIndex = 0, moveSpeed = 240) {
+    if (this.paddleCount >= this.maxPaddles) return;
+    const idx = this.paddleCount * this.varsPerPaddle;
+    this.data[idx] = x;
+    this.data[idx + 1] = y;
+    this.data[idx + 2] = width;
+    this.data[idx + 3] = height;
+    this.data[idx + 4] = targetX;
+    this.data[idx + 5] = sideIndex;
+    this.speed[this.paddleCount] = moveSpeed;
+    this.paddleCount += 1;
+  }
+
+  setTarget(index, targetX) {
+    if (index < 0 || index >= this.paddleCount) return;
+    this.data[index * this.varsPerPaddle + 4] = targetX;
+  }
+
+  update(deltaTime) {
+    const data = this.data;
+    const V = this.varsPerPaddle;
+    for (let i = 0, idx = 0; i < this.paddleCount; i += 1, idx += V) {
+      const targetX = data[idx + 4];
+      const x = data[idx];
+      const dist = targetX - x;
+      if (dist === 0) continue;
+      const move = Math.sign(dist) * Math.min(Math.abs(dist), this.speed[i] * deltaTime);
+      data[idx] = x + move;
+    }
+  }
+
+  draw(ctx, color = '#fff') {
+    if (this.paddleCount === 0) return;
+    ctx.fillStyle = color;
+    const data = this.data;
+    const V = this.varsPerPaddle;
+    for (let i = 0, idx = 0; i < this.paddleCount; i += 1, idx += V) {
+      ctx.fillRect(data[idx], data[idx + 1], data[idx + 2], data[idx + 3]);
+    }
+  }
+
+  reset() {
+    this.paddleCount = 0;
+  }
 }
 
 function getMenuFlashAlpha(side, zoneIndex) {
@@ -308,6 +435,13 @@ function syncWorld() {
     );
   });
   state.worldWidth = state.columnCount * state.config.zoneWidth;
+  state.playersByZone = {
+    top: Array.from({ length: state.columnCount }, () => null),
+    bottom: Array.from({ length: state.columnCount }, () => null)
+  };
+  state.players.forEach((player) => {
+    state.playersByZone[player.side][player.zoneIndex] = player;
+  });
 }
 
 function spawnBall() {
@@ -379,7 +513,7 @@ function playerPaddleBounds(player) {
 }
 
 function getZonePlayer(zoneIndex, side) {
-  return state.players.find((player) => player.zoneIndex === zoneIndex && player.side === side);
+  return state.playersByZone?.[side]?.[zoneIndex] || null;
 }
 
 function hitPaddle(player, ball) {
@@ -504,16 +638,19 @@ function updateBalls(delta) {
 }
 
 function updateBots(delta) {
-  const candidateBalls = state.balls.filter((ball) => ball.vx > 0);
+  const zoneBalls = Array.from({ length: state.columnCount }, () => []);
+  for (const ball of state.balls) {
+    if (ball.vx <= 0) continue;
+    const zoneIndex = Math.max(0, Math.min(state.columnCount - 1, Math.floor(ball.x / state.config.zoneWidth)));
+    zoneBalls[zoneIndex].push(ball);
+  }
+
   for (const player of state.players) {
     if (!player.isBot) continue;
     const paddle = playerPaddleBounds(player);
     let target = paddle.x + paddle.width / 2;
 
-    const inZoneBalls = candidateBalls.filter((ball) => {
-      const zoneIndex = Math.floor(ball.x / state.config.zoneWidth);
-      return zoneIndex === player.zoneIndex;
-    });
+    const inZoneBalls = zoneBalls[player.zoneIndex];
     if (inZoneBalls.length > 0) {
       target = inZoneBalls[0].x;
     }
@@ -755,7 +892,12 @@ function render() {
 
   }
 
+  const visibleWorldLeft = state.cameraX;
+  const visibleWorldRight = state.cameraX + cssWidth / viewScale;
   for (const ball of state.balls) {
+    if (ball.x + ball.radius < visibleWorldLeft || ball.x - ball.radius > visibleWorldRight) {
+      continue;
+    }
     ctx.fillStyle = '#fff';
     ctx.beginPath();
     ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
@@ -809,9 +951,10 @@ function updateUI() {
 function resizeCanvas() {
   canvas.style.height = `${getCanvasHeight()}px`;
   const rect = canvas.getBoundingClientRect();
-  canvas.width = Math.floor(rect.width * devicePixelRatio);
-  canvas.height = Math.floor(rect.height * devicePixelRatio);
-  ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+  const pixelRatio = Math.min(MAX_CANVAS_PIXEL_RATIO, devicePixelRatio);
+  canvas.width = Math.floor(rect.width * pixelRatio);
+  canvas.height = Math.floor(rect.height * pixelRatio);
+  ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
   render();
 }
 

@@ -134,14 +134,17 @@ select {
   font-size: 0.9rem;
 }
 .main-grid {
-  display: grid;
-  grid-template-columns: 1fr;
+  display: flex;
+  flex: 1;
   gap: 18px;
   padding-bottom: 18px;
-    padding-top: 18px;
+  padding-top: 18px;
+  min-height: 0;
 }
 .game-panel {
   position: relative;
+  display: flex;
+  flex: 1;
   background: #090909;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 16px;
@@ -152,12 +155,13 @@ select {
 /* maincolor canvas background */
 canvas {
   width: 100%;
-  height: 450px;
+  height: 100%;
   display: block;
   background: #010101;
 }
 .bottom-panel {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
   padding: 10px 14px 0;
@@ -167,8 +171,8 @@ canvas {
   display: flex;
   align-items: center;
   gap: 10px;
-  /* background: rgba(40, 40, 40, 0.95);
-  border: 1px solid rgba(255, 255, 255, 0.08); */
+  flex: 1 1 320px;
+  min-width: 0;
   border-radius: 12px;
   padding: 0px 12px;
 }
@@ -176,9 +180,10 @@ canvas {
 .zoom-bar span {
   font-size: 0.82rem;
   color: rgba(201, 201, 201, 0.88);
+  white-space: nowrap;
 }
 .zoom-bar input[type="range"] {
-  width: 220px;
+  width: 100%;
   accent-color: #4f4f4f;
 }
 .zoom-bar input[type="range"]::-webkit-slider-runnable-track {
@@ -208,14 +213,15 @@ canvas {
 }
 .canvas-info-bar {
   display: flex;
+  flex: 0 1 240px;
   justify-content: flex-end;
   align-items: center;
-  gap: 18px;
+  flex-wrap: wrap;
+  gap: 10px;
   padding: 0;
   color: rgba(201, 201, 201, 0.88);
   font-size: 0.76rem;
   text-align: right;
-}
   min-height: 16px;
 }
 .canvas-info-bar strong {
