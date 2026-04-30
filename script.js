@@ -81,6 +81,7 @@ const state = {
     startingBotCount: 199,
     flipTopView: false
   },
+  ballSpawnToggle: 'left',
   cameraX: 0,
   cameraXTarget: 0,
   cameraXStart: 0,
@@ -758,13 +759,23 @@ function spawnBall() {
   if (currentBallCount >= state.config.maxBallCount) return;
 
   const worldWidth = state.worldWidth || state.config.zoneWidth;
+  const startY = getCanvasHeight() / 2;
+
   let startX = worldWidth / 2;
+  if (state.config.ballSpawnPoint === 'random') {
+    startX = state.config.ballRadius + 8 + Math.random() * Math.max(0, worldWidth - (state.config.ballRadius + 8) * 2);
+  }
   if (state.config.ballSpawnPoint === 'left') {
     startX = state.config.ballRadius + 8;
   } else if (state.config.ballSpawnPoint === 'right') {
     startX = worldWidth - (state.config.ballRadius + 8);
+  } else if (state.config.ballSpawnPoint === 'alternate') {
+    startX = state.ballSpawnToggle === 'left'
+      ? state.config.ballRadius + 8
+      : worldWidth - (state.config.ballRadius + 8);
+    state.ballSpawnToggle = state.ballSpawnToggle === 'left' ? 'right' : 'left';
   }
-  const startY = getCanvasHeight() / 2;
+
   if (state.ballWorker) {
     sendBallWorkerSpawnBall(startX, startY, state.config.minBallSpeed * 10, state.config.maxBallSpeed * 10);
   } else {

@@ -321,6 +321,10 @@ select {
   background: rgba(255, 255, 255, 0.05);
   color: #fff;
 }
+.options-menu select option {
+  background: #000;
+  color: #fff;
+}
 input[type="range"] {
   width: 100%;
 }
