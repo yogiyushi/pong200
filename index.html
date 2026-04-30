@@ -38,6 +38,7 @@
               Flip top-player view
             </label>
           </div>
+          <button id="resetSettingsButton" class="menu-button">Reset defaults</button>
           <div class="menu-item">
             <label for="ballSpawnPoint">Ball spawn point</label>
             <select id="ballSpawnPoint">
@@ -47,6 +48,11 @@
               <option value="alternate">Left / Right</option>
               <option value="random">Random position</option>
             </select>
+          </div>
+          <div class="menu-item">
+            <label for="cameraZoom">Zoom</label>
+            <input id="cameraZoom" type="range" min="0.1" max="1" step="0.01" value="1" />
+            <div class="menu-note"><span id="cameraZoomLabel">100%</span></div>
           </div>
           <div class="menu-item">
             <label for="ballInterval">Ball interval</label>
@@ -98,14 +104,9 @@
       </section>
     </main>
     <div class="bottom-panel">
-      <div class="zoom-bar">
-        <label for="cameraZoom">Zoom</label>
-        <input id="cameraZoom" type="range" min="0.1" max="1" step="0.01" value="1" />
-        <span id="cameraZoomLabel">100%</span>
-      </div>
       <div class="canvas-info-bar">
         <span>FPS: <strong id="canvasFPS">0</strong></span>
-        <span>Bots: <strong id="canvasPlayerCount">0</strong></span>
+        <span>Players: <strong id="canvasPlayerCount">0</strong></span>
         <span>Balls: <strong id="canvasBallCount">0</strong></span>
       </div>
     </div>

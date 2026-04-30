@@ -33,6 +33,7 @@ const botPaddleSizeInput = document.getElementById('botPaddleSize');
 const botPaddleSizeLabel = document.getElementById('botPaddleSizeLabel');
 const optionsToggle = document.getElementById('optionsToggle');
 const optionsMenu = document.getElementById('optionsMenu');
+const resetSettingsButton = document.getElementById('resetSettingsButton');
 const menuFlipView = document.getElementById('menuFlipView');
 const startingBotCountInput = document.getElementById('startingBotCount');
 const startingBotCountLabel = document.getElementById('startingBotCountLabel');
@@ -110,6 +111,7 @@ const MAX_CANVAS_PIXEL_RATIO = 1.5;
 const CANVAS_MENU_HEIGHT = 16;
 const CANVAS_ASPECT_RATIO = 960 / 450;
 const SETTINGS_STORAGE_KEY = 'pong200.settings';
+let defaultSettings = null;
 const PLAYER_ICON_SIZE = 14;
 const PLAYER_ICONS = {
   human: new Image(),
@@ -134,6 +136,47 @@ function saveSettings() {
     playerColor: playerColorInput.value
   };
   localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+}
+
+function getCurrentSettingsSnapshot() {
+  return {
+    cameraZoom: Number(cameraZoomInput.value),
+    spawnIntervalSec: Number(ballIntervalInput.value),
+    minBallSpeed: Number(minBallSpeedInput.value),
+    maxBallSpeed: Number(maxBallSpeedInput.value),
+    maxBallCount: Number(maxBallCountInput.value),
+    ballSpawnPoint: ballSpawnPointInput.value,
+    playerPaddleSize: Number(playerPaddleSizeInput.value),
+    botPaddleSize: Number(botPaddleSizeInput.value),
+    startingBotCount: Number(startingBotCountInput.value),
+    flipTopView: menuFlipView.checked,
+    playerName: playerNameInput.value,
+    playerColor: playerColorInput.value
+  };
+}
+
+function restoreSettings(settings) {
+  if (!settings) return;
+  state.config.zoomLevel = Number(settings.cameraZoom ?? state.config.zoomLevel);
+  state.config.spawnInterval = Math.round(clamp(Number(settings.spawnIntervalSec ?? state.config.spawnInterval / 1000), BALL_INTERVAL_MIN_SEC, BALL_INTERVAL_MAX_SEC) * 1000);
+  state.config.minBallSpeed = Number(settings.minBallSpeed ?? state.config.minBallSpeed);
+  state.config.maxBallSpeed = Number(settings.maxBallSpeed ?? state.config.maxBallSpeed);
+  state.config.maxBallCount = clamp(Number(settings.maxBallCount ?? state.config.maxBallCount), 1, 100000);
+  state.config.ballSpawnPoint = settings.ballSpawnPoint || state.config.ballSpawnPoint;
+  state.config.playerPaddleSize = Number(settings.playerPaddleSize ?? state.config.playerPaddleSize);
+  state.config.botPaddleSize = Number(settings.botPaddleSize ?? state.config.botPaddleSize);
+  state.config.startingBotCount = clamp(Number(settings.startingBotCount ?? state.config.startingBotCount), 0, 1000);
+  state.config.flipTopView = Boolean(settings.flipTopView ?? state.config.flipTopView);
+  playerNameInput.value = settings.playerName ?? playerNameInput.value;
+  playerColorInput.value = settings.playerColor ?? playerColorInput.value;
+
+  applySettingsToInputs();
+  saveSettings();
+  render();
+}
+
+function captureDefaultSettings() {
+  defaultSettings = getCurrentSettingsSnapshot();
 }
 
 function updatePlayPauseButton() {
@@ -176,7 +219,10 @@ async function toggleFullscreen() {
 
 function loadSettings() {
   const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
-  if (!raw) return;
+  if (!raw) {
+    if (!defaultSettings) captureDefaultSettings();
+    return;
+  }
   try {
     const settings = JSON.parse(raw);
     if (settings.cameraZoom != null) state.config.zoomLevel = Number(settings.cameraZoom);
@@ -1282,17 +1328,8 @@ function cameraXForCurrentPlayer(viewScale) {
 
   const visibleWorldWidth = cssWidth / viewScale;
   const zoneLeft = selected.zoneIndex * state.config.zoneWidth;
-  const zoneRight = zoneLeft + state.config.zoneWidth;
-  const viewLeft = state.cameraX;
-  const viewRight = viewLeft + visibleWorldWidth;
   const zoneCenter = zoneLeft + state.config.zoneWidth / 2;
-  const targetCameraX = zoneCenter - visibleWorldWidth / 2;
-
-  if (zoneLeft >= viewLeft && zoneRight <= viewRight && state.cameraXTarget === state.cameraX) {
-    return state.cameraX;
-  }
-
-  return targetCameraX;
+  return zoneCenter - visibleWorldWidth / 2;
 }
 
 function render() {
@@ -1482,6 +1519,11 @@ function attachEvents() {
   addBotButton.addEventListener('click', addBot);
 
   playerNameInput.addEventListener('input', saveSettings);
+  if (resetSettingsButton) {
+    resetSettingsButton.addEventListener('click', () => {
+      restoreSettings(defaultSettings || getCurrentSettingsSnapshot());
+    });
+  }
 
   cameraZoomInput.addEventListener('input', () => {
     const value = Number(cameraZoomInput.value);
@@ -1766,6 +1808,7 @@ function gameLoop() {
 }
 
 function setup() {
+  captureDefaultSettings();
   attachEvents();
   loadSettings();
   applySettingsToInputs();

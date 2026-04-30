@@ -199,9 +199,9 @@ canvas#pongCanvas {
 .bottom-panel {
   display: flex;
   flex-wrap: nowrap;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: center;
-  padding: 0px 14px;
+  padding: 2px 14px;
   gap: 14px;
   min-width: 0;
   overflow-x: auto;
@@ -209,11 +209,11 @@ canvas#pongCanvas {
 .zoom-bar {
   display: flex;
   align-items: center;
-  gap: 10px;
-  flex: 0 1 220px;
+  gap: 8px;
+  flex: 0 1 10px;
   min-width: 0;
   border-radius: 12px;
-  padding: 0px 12px;
+  /* padding: 0px 12px; */
   flex-wrap: nowrap;
 }
 .zoom-bar label,
@@ -276,27 +276,6 @@ canvas#pongCanvas {
   background: #ddd;
   border-radius: 50%;
   /* border: 1px solid rgba(255, 255, 255, 0.18); */
-}
-.canvas-info-bar {
-  display: flex;
-  flex: 1 1 240px;
-  justify-content: flex-end;
-  align-items: center;
-  flex-wrap: nowrap;
-  gap: 10px;
-  padding: 0;
-  color: rgba(201, 201, 201, 0.88);
-  font-size: 0.76rem;
-  text-align: right;
-  min-height: 16px;
-  min-width: 0;
-}
-.canvas-info-bar span {
-  display: inline-flex;
-  white-space: nowrap;
-}
-.canvas-info-bar strong {
-  font-weight: 400;
 }
 
 @media (max-width: 760px) {
@@ -393,6 +372,11 @@ select {
 }
 input[type="range"] {
   width: 100%;
+}
+.zoom-bar input[type="range"] {
+  width: auto;
+  min-width: 56px;
+  max-width: 100%;
 }
 button {
   width: 100%;
