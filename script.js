@@ -48,6 +48,8 @@ let glResolutionLocation = null;
 let glCameraXLocation = null;
 let glViewScaleLocation = null;
 let glYOffsetLocation = null;
+let glWorldHeightLocation = null;
+let glFlipYLocation = null;
 let glPixelRatio = 1;
 let glMaxBalls = 0;
 let ballDataBuffer = null;
@@ -88,7 +90,9 @@ const state = {
     worldLeft: 0,
     zoomLevel: 1,
     startingBotCount: 31,
-    flipTopView: false
+    flipTopView: false,
+    playerName: 'You',
+    playerColor: '#ff00ea'
   },
   ballSpawnToggle: 'left',
   cameraX: 0,
@@ -123,7 +127,7 @@ const DEFAULT_SETTINGS = {
   startingBotCount: 31,
   flipTopView: false,
   playerName: 'You',
-  playerColor: '#ffffff'
+  playerColor: '#ff00ea'
 };
 const PLAYER_ICON_SIZE = 14;
 const PLAYER_ICONS = {
@@ -180,8 +184,10 @@ function restoreSettings(settings) {
   state.config.botPaddleSize = Number(settings.botPaddleSize ?? state.config.botPaddleSize);
   state.config.startingBotCount = clamp(Number(settings.startingBotCount ?? state.config.startingBotCount), 0, 1000);
   state.config.flipTopView = Boolean(settings.flipTopView ?? state.config.flipTopView);
-  playerNameInput.value = settings.playerName ?? playerNameInput.value;
-  playerColorInput.value = settings.playerColor ?? playerColorInput.value;
+  state.config.playerName = settings.playerName ?? state.config.playerName;
+  state.config.playerColor = settings.playerColor ?? state.config.playerColor;
+  playerNameInput.value = state.config.playerName;
+  playerColorInput.value = state.config.playerColor;
 
   applySettingsToInputs();
   saveSettings();
@@ -243,8 +249,14 @@ function loadSettings() {
     if (settings.botPaddleSize != null) state.config.botPaddleSize = Number(settings.botPaddleSize);
     if (settings.startingBotCount != null) state.config.startingBotCount = clamp(Number(settings.startingBotCount), 0, 1000);
     if (settings.flipTopView != null) state.config.flipTopView = Boolean(settings.flipTopView);
-    if (settings.playerName != null) playerNameInput.value = settings.playerName;
-    if (settings.playerColor != null) playerColorInput.value = settings.playerColor;
+    if (settings.playerName != null) {
+      state.config.playerName = settings.playerName;
+      playerNameInput.value = settings.playerName;
+    }
+    if (settings.playerColor != null) {
+      state.config.playerColor = settings.playerColor;
+      playerColorInput.value = settings.playerColor;
+    }
   } catch (error) {
     console.warn('Could not load saved settings:', error);
   }
@@ -268,6 +280,8 @@ function applySettingsToInputs() {
   startingBotCountInput.value = String(state.config.startingBotCount);
   startingBotCountLabel.textContent = String(state.config.startingBotCount);
   menuFlipView.checked = state.config.flipTopView;
+  playerNameInput.value = state.config.playerName || 'You';
+  playerColorInput.value = state.config.playerColor || '#ff00ea';
 }
 
 function setBallIntervalSeconds(seconds) {
@@ -332,8 +346,11 @@ function initWebGL(maxBalls) {
     uniform float u_cameraX;
     uniform float u_viewScale;
     uniform float u_yOffset;
+    uniform float u_worldHeight;
+    uniform bool u_flipY;
     void main() {
-      vec2 pos = vec2((a_position.x - u_cameraX) * u_viewScale, a_position.y * u_viewScale + u_yOffset);
+      float y = u_flipY ? (u_worldHeight - a_position.y) : a_position.y;
+      vec2 pos = vec2((a_position.x - u_cameraX) * u_viewScale, y * u_viewScale + u_yOffset);
       vec2 clip = vec2(pos.x / u_resolution.x * 2.0 - 1.0, 1.0 - pos.y / u_resolution.y * 2.0);
       gl_Position = vec4(clip, 0.0, 1.0);
       gl_PointSize = u_pointSize;
@@ -361,6 +378,8 @@ function initWebGL(maxBalls) {
   glCameraXLocation = context.getUniformLocation(program, 'u_cameraX');
   glViewScaleLocation = context.getUniformLocation(program, 'u_viewScale');
   glYOffsetLocation = context.getUniformLocation(program, 'u_yOffset');
+  glWorldHeightLocation = context.getUniformLocation(program, 'u_worldHeight');
+  glFlipYLocation = context.getUniformLocation(program, 'u_flipY');
   context.enableVertexAttribArray(glPositionLocation);
   context.vertexAttribPointer(glPositionLocation, 2, context.FLOAT, false, 16, 0);
   return context;
@@ -387,10 +406,13 @@ function drawWebGLBalls(cssWidth, cssHeight, worldHeight, viewScale) {
   gl.bufferSubData(gl.ARRAY_BUFFER, 0, floatData);
   gl.useProgram(glProgram);
 
+  const current = getCurrentPlayer();
   const yOffset = (cssHeight - worldHeight * viewScale) / 2;
   gl.uniform2f(glResolutionLocation, cssWidth, cssHeight);
   gl.uniform1f(glCameraXLocation, state.cameraX);
   gl.uniform1f(glViewScaleLocation, viewScale);
+  gl.uniform1f(glWorldHeightLocation, worldHeight);
+  gl.uniform1i(glFlipYLocation, current && current.side === 'top' && state.config.flipTopView ? 1 : 0);
   gl.uniform1f(glYOffsetLocation, yOffset);
   gl.uniform1f(glPointSizeLocation, Math.max(1, state.config.ballRadius * 2 * viewScale * glPixelRatio));
 
