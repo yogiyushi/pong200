@@ -139,7 +139,7 @@ select {
   flex: 1;
   gap: 18px;
   /* padding-bottom: 18px; */
-  padding-top: 18px;
+  /* padding-top: 18px; */
   min-height: 0;
 }
 .game-panel {
