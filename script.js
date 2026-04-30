@@ -5,13 +5,20 @@ const ballCountEl = document.getElementById('ballCount');
 const canvasPlayerCountEl = document.getElementById('canvasPlayerCount');
 const canvasBallCountEl = document.getElementById('canvasBallCount');
 const canvasFPSEl = document.getElementById('canvasFPS');
+const topFPSEl = document.getElementById('topFPS');
+const topPlayersEl = document.getElementById('topPlayers');
+const topBallsEl = document.getElementById('topBalls');
 const playerNameInput = document.getElementById('playerName');
 const playerColorInput = document.getElementById('playerColor');
-const joinButton = document.getElementById('joinButton');
 const addBotButton = document.getElementById('addBotButton');
+const restartButton = document.getElementById('restartButton');
 const cameraZoomInput = document.getElementById('cameraZoom');
 const cameraZoomLabel = document.getElementById('cameraZoomLabel');
 const ballIntervalInput = document.getElementById('ballInterval');
+const playPauseToggle = document.getElementById('playPauseToggle');
+const playPauseIcon = document.getElementById('playPauseIcon');
+const fullscreenToggle = document.getElementById('fullscreenToggle');
+const fullscreenIcon = document.getElementById('fullscreenIcon');
 const ballIntervalLabel = document.getElementById('ballIntervalLabel');
 const minBallSpeedInput = document.getElementById('minBallSpeed');
 const minBallSpeedLabel = document.getElementById('minBallSpeedLabel');
@@ -55,6 +62,7 @@ const state = {
   ballWorkerData: new Float32Array(0),
   ballWorkerCount: 0,
   currentPlayerId: null,
+  isPaused: false,
   lastTick: performance.now(),
   nextBallAt: performance.now() + 5000,
   input: {
@@ -125,6 +133,44 @@ function saveSettings() {
     playerColor: playerColorInput.value
   };
   localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+}
+
+function updatePlayPauseButton() {
+  if (!playPauseToggle || !playPauseIcon) return;
+  const paused = state.isPaused;
+  playPauseIcon.src = paused
+    ? 'icons/play_arrow_24dp_E3E3E3_FILL0_wght400_GRAD0_opsz24.svg'
+    : 'icons/pause_24dp_E3E3E3_FILL0_wght400_GRAD0_opsz24.svg';
+  playPauseIcon.alt = paused ? 'Play' : 'Pause';
+  playPauseToggle.setAttribute('aria-label', paused ? 'Play' : 'Pause');
+}
+
+function setPaused(paused) {
+  state.isPaused = paused;
+  updatePlayPauseButton();
+}
+
+function togglePause() {
+  setPaused(!state.isPaused);
+}
+
+function updateFullscreenButton() {
+  if (!fullscreenToggle) return;
+  const isFullscreen = Boolean(document.fullscreenElement);
+  fullscreenToggle.setAttribute('aria-label', isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen');
+}
+
+async function toggleFullscreen() {
+  try {
+    if (!document.fullscreenElement) {
+      await document.documentElement.requestFullscreen();
+    } else {
+      await document.exitFullscreen();
+    }
+  } catch (error) {
+    console.warn('Fullscreen toggle failed', error);
+  }
+  updateFullscreenButton();
 }
 
 function loadSettings() {
@@ -1318,6 +1364,9 @@ function refreshCounts() {
   if (ballCountEl) ballCountEl.textContent = currentBallCount;
   if (canvasPlayerCountEl) canvasPlayerCountEl.textContent = state.players.length;
   if (canvasBallCountEl) canvasBallCountEl.textContent = currentBallCount;
+  if (topPlayersEl) topPlayersEl.textContent = state.players.length;
+  if (topBallsEl) topBallsEl.textContent = currentBallCount;
+  if (topFPSEl) topFPSEl.textContent = String(Math.round(state.fps));
 }
 
 function updateUI() {
@@ -1353,15 +1402,15 @@ function resizeCanvas() {
 }
 
 function attachEvents() {
-  joinButton.addEventListener('click', () => {
-    if (state.currentPlayerId) return;
-    addPlayer({
+  playPauseToggle.addEventListener('click', togglePause);
+  fullscreenToggle.addEventListener('click', toggleFullscreen);
+  restartButton.addEventListener('click', () => {
+    restartGame({
       name: playerNameInput.value.trim() || 'You',
-      flag: '',
-      color: playerColorInput.value,
-      isLocal: true
+      color: playerColorInput.value
     });
   });
+  document.addEventListener('fullscreenchange', updateFullscreenButton);
   addBotButton.addEventListener('click', addBot);
 
   playerNameInput.addEventListener('input', saveSettings);
@@ -1624,6 +1673,12 @@ function attachEvents() {
 
 function gameLoop() {
   const now = performance.now();
+  if (state.isPaused) {
+    state.lastTick = now;
+    requestAnimationFrame(gameLoop);
+    return;
+  }
+
   const frameTime = now - state.lastTick;
   state.frameTime = frameTime;
   state.fps = frameTime > 0 ? 1000 / frameTime : 0;
@@ -1649,6 +1704,8 @@ function setup() {
   attachEvents();
   loadSettings();
   applySettingsToInputs();
+  updatePlayPauseButton();
+  updateFullscreenButton();
   state.nextBallAt = performance.now() + state.config.spawnInterval;
 
   ballIntervalInput.min = String(BALL_INTERVAL_MIN_SEC);

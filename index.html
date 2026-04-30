@@ -11,11 +11,18 @@
     <header class="top-bar">
       <div class="brand">Pong200</div>
       <div class="top-menu">
+        <button id="playPauseToggle" class="icon-button" aria-label="Pause">
+          <img id="playPauseIcon" src="icons/pause_24dp_E3E3E3_FILL0_wght400_GRAD0_opsz24.svg" alt="Pause" />
+        </button>
+        <button id="fullscreenToggle" class="icon-button" aria-label="Fullscreen">
+          <img id="fullscreenIcon" src="icons/fullscreen_24dp_E3E3E3_FILL0_wght400_GRAD0_opsz24.svg" alt="Fullscreen" />
+        </button>
         <button id="optionsToggle" class="icon-button" aria-label="Options">
           <img src="icons/density_medium_24dp_E3E3E3_FILL0_wght400_GRAD0_opsz24.svg" alt="Options" />
         </button>
         <div id="optionsMenu" class="options-menu hidden" role="menu" aria-hidden="true">
           <div class="menu-header">Options</div>
+          <button id="restartButton" class="menu-button">Restart</button>
           <div class="menu-item">
             <label for="playerName">Name</label>
             <input id="playerName" type="text" value="You" maxlength="12" />
@@ -79,9 +86,10 @@
         </div>
       </div>
     </header>
-    <div class="info-bar">Welcome! Use the options menu in the top right for game settings and player controls. Click Join to begin.</div>
-    <div class="join-bar">
-      <button id="joinButton" class="join-button">Join</button>
+    <div class="info-bar">
+      <span>FPS: <span id="topFPS">0</span></span>
+      <span style="margin-left: 18px;">Bots: <span id="topPlayers">0</span></span>
+      <span style="margin-left: 18px;">Balls: <span id="topBalls">0</span></span>
     </div>
     <main class="main-grid">
       <section class="game-panel">
@@ -97,7 +105,7 @@
       </div>
       <div class="canvas-info-bar">
         <span>FPS: <strong id="canvasFPS">0</strong></span>
-        <span>Players: <strong id="canvasPlayerCount">0</strong></span>
+        <span>Bots: <strong id="canvasPlayerCount">0</strong></span>
         <span>Balls: <strong id="canvasBallCount">0</strong></span>
       </div>
     </div>
