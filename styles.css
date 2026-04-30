@@ -138,19 +138,24 @@ select {
   display: flex;
   flex: 1;
   gap: 18px;
-  /* padding-bottom: 18px; */
-  /* padding-top: 18px; */
+  align-items: center;
+  justify-content: center;
   min-height: 0;
+  padding: 0 14px;
 }
 .game-panel {
   position: relative;
   display: flex;
-  flex: 1;
+  flex: 1 1 auto;
+  width: 100%;
+  max-width: 100%;
+  aspect-ratio: 32 / 15;
   background: #111111;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 0;
   overflow: hidden;
   min-height: 0;
+  height: auto;
   touch-action: none;
 }
 
@@ -181,10 +186,7 @@ canvas#pongCanvas {
   flex-wrap: nowrap;
   justify-content: space-between;
   align-items: center;
-  padding-top: 2px ;
-   padding-bottom: 2px ;
-    padding-left: 15px;
-     padding-right: 15px;
+  padding: 8px 14px;
   gap: 18px;
   min-width: 0;
   overflow-x: auto;

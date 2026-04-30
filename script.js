@@ -108,6 +108,7 @@ const BALL_INTERVAL_MAX_SEC = 10;
 const BALL_INTERVAL_STEP_SEC = 0.001;
 const MAX_CANVAS_PIXEL_RATIO = 1.5;
 const CANVAS_MENU_HEIGHT = 16;
+const CANVAS_ASPECT_RATIO = 960 / 450;
 const SETTINGS_STORAGE_KEY = 'pong200.settings';
 const PLAYER_ICON_SIZE = 14;
 const PLAYER_ICONS = {
@@ -1132,7 +1133,13 @@ function updateGame(delta) {
 }
 
 function getCanvasHeight() {
-  return 450;
+  const topBarHeight = document.querySelector('.top-bar')?.getBoundingClientRect().height || 0;
+  const bottomPanelHeight = document.querySelector('.bottom-panel')?.getBoundingClientRect().height || 0;
+  const infoBarHeight = document.querySelector('.info-bar')?.getBoundingClientRect().height || 0;
+  const availableHeight = window.innerHeight - topBarHeight - bottomPanelHeight - infoBarHeight - 28;
+  const availableWidth = gamePanel?.clientWidth || window.innerWidth;
+  const heightFromWidth = availableWidth / CANVAS_ASPECT_RATIO;
+  return Math.max(240, Math.min(availableHeight, heightFromWidth));
 }
 
 function getViewScale() {
@@ -1379,9 +1386,13 @@ function updateUI() {
 }
 
 function resizeCanvas() {
-  canvas.style.height = `${getCanvasHeight()}px`;
+  const canvasHeight = getCanvasHeight();
+  canvas.style.height = `${canvasHeight}px`;
   if (ballCanvas) {
-    ballCanvas.style.height = `${getCanvasHeight()}px`;
+    ballCanvas.style.height = `${canvasHeight}px`;
+  }
+  if (gamePanel) {
+    gamePanel.style.height = `${canvasHeight}px`;
   }
   const rect = canvas.getBoundingClientRect();
   const pixelRatio = Math.min(MAX_CANVAS_PIXEL_RATIO, devicePixelRatio);
