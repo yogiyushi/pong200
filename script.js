@@ -29,6 +29,8 @@ const maxBallCountLabel = document.getElementById('maxBallCountLabel');
 const ballSpawnPointInput = document.getElementById('ballSpawnPoint');
 const playerPaddleSizeInput = document.getElementById('playerPaddleSize');
 const playerPaddleSizeLabel = document.getElementById('playerPaddleSizeLabel');
+const botSkillLevelInput = document.getElementById('botSkillLevel');
+const botSkillLevelLabel = document.getElementById('botSkillLevelLabel');
 const botPaddleSizeInput = document.getElementById('botPaddleSize');
 const botPaddleSizeLabel = document.getElementById('botPaddleSizeLabel');
 const optionsToggle = document.getElementById('optionsToggle');
@@ -77,6 +79,7 @@ const state = {
     paddleLength: 40,
     playerPaddleSize: 25,
     botPaddleSize: 25,
+    botSkill: 50,
     paddleHeight: 10,
     paddleInset: 10,
     ballRadius: 3,
@@ -90,7 +93,7 @@ const state = {
     worldLeft: 0,
     zoomLevel: 1,
     startingBotCount: 31,
-    flipTopView: false,
+    flipTopView: true,
     playerName: 'You',
     playerColor: '#ff00ea'
   },
@@ -124,8 +127,9 @@ const DEFAULT_SETTINGS = {
   ballSpawnPoint: 'left',
   playerPaddleSize: 25,
   botPaddleSize: 25,
+  botSkill: 50,
   startingBotCount: 31,
-  flipTopView: false,
+  flipTopView: true,
   playerName: 'You',
   playerColor: '#ff00ea'
 };
@@ -146,6 +150,7 @@ function saveSettings() {
     maxBallCount: Number(maxBallCountInput.value),
     ballSpawnPoint: ballSpawnPointInput.value,
     playerPaddleSize: Number(playerPaddleSizeInput.value),
+    botSkill: Number(botSkillLevelInput.value),
     botPaddleSize: Number(botPaddleSizeInput.value),
     startingBotCount: Number(startingBotCountInput.value),
     flipTopView: menuFlipView.checked,
@@ -164,6 +169,7 @@ function getCurrentSettingsSnapshot() {
     maxBallCount: Number(maxBallCountInput.value),
     ballSpawnPoint: ballSpawnPointInput.value,
     playerPaddleSize: Number(playerPaddleSizeInput.value),
+    botSkill: Number(botSkillLevelInput.value),
     botPaddleSize: Number(botPaddleSizeInput.value),
     startingBotCount: Number(startingBotCountInput.value),
     flipTopView: menuFlipView.checked,
@@ -246,6 +252,7 @@ function loadSettings() {
     if (settings.maxBallCount != null) state.config.maxBallCount = clamp(Number(settings.maxBallCount), 1, 100000);
     if (settings.ballSpawnPoint != null) state.config.ballSpawnPoint = settings.ballSpawnPoint;
     if (settings.playerPaddleSize != null) state.config.playerPaddleSize = Number(settings.playerPaddleSize);
+    if (settings.botSkill != null) state.config.botSkill = Number(settings.botSkill);
     if (settings.botPaddleSize != null) state.config.botPaddleSize = Number(settings.botPaddleSize);
     if (settings.startingBotCount != null) state.config.startingBotCount = clamp(Number(settings.startingBotCount), 0, 1000);
     if (settings.flipTopView != null) state.config.flipTopView = Boolean(settings.flipTopView);
@@ -275,6 +282,8 @@ function applySettingsToInputs() {
   ballSpawnPointInput.value = state.config.ballSpawnPoint;
   playerPaddleSizeInput.value = String(state.config.playerPaddleSize);
   playerPaddleSizeLabel.textContent = `${state.config.playerPaddleSize}%`;
+  botSkillLevelInput.value = String(state.config.botSkill);
+  botSkillLevelLabel.textContent = `${state.config.botSkill}%`;
   botPaddleSizeInput.value = String(state.config.botPaddleSize);
   botPaddleSizeLabel.textContent = `${state.config.botPaddleSize}%`;
   startingBotCountInput.value = String(state.config.startingBotCount);
@@ -1153,29 +1162,54 @@ function updateBots(delta) {
   if (ballCount > 0) {
     const V = engine ? engine.varsPerBall : 4;
     for (let i = 0, idx = 0; i < ballCount; i += 1, idx += V) {
-      const vx = data[idx + 2];
-      if (vx <= 0) continue;
       const x = data[idx];
+      const y = data[idx + 1];
+      const vx = data[idx + 2];
+      const vy = data[idx + 3];
       const zoneIndex = Math.max(0, Math.min(state.columnCount - 1, Math.floor(x / state.config.zoneWidth)));
-      zoneBalls[zoneIndex].push(x);
+      zoneBalls[zoneIndex].push({ x, y, vx, vy });
     }
   }
+
+  const worldRight = state.worldWidth;
+  const reflectX = (position) => {
+    let x = position;
+    const width = worldRight;
+    if (width <= 0) return x;
+    x = ((x % (2 * width)) + 2 * width) % (2 * width);
+    if (x > width) x = 2 * width - x;
+    return x;
+  };
 
   for (const player of state.players) {
     if (!player.isBot) continue;
     const paddle = playerPaddleBounds(player);
+    const botSkill = clamp(state.config.botSkill, 0, 100) / 100;
     let target = paddle.x + paddle.width / 2;
+    const paddleCenterY = paddle.y + paddle.height / 2;
+    const ballsInZone = zoneBalls[player.zoneIndex] || [];
 
-    const inZoneBalls = zoneBalls[player.zoneIndex] || [];
-    if (inZoneBalls.length > 0) {
-      target = inZoneBalls[0];
+    if (ballsInZone.length > 0) {
+      const desiredDirection = player.side === 'bottom' ? 1 : -1;
+      const relevant = ballsInZone.filter((ball) => ball.vy * desiredDirection > 0);
+      const useful = relevant.length > 0 ? relevant : ballsInZone;
+
+      let bestBall = useful[0];
+      if (player.side === 'bottom') {
+        bestBall = useful.reduce((best, ball) => (ball.y > best.y ? ball : best), useful[0]);
+      } else {
+        bestBall = useful.reduce((best, ball) => (ball.y < best.y ? ball : best), useful[0]);
+      }
+
+      target = bestBall.x;
     }
 
     const zoneLeft = player.zoneIndex * state.config.zoneWidth;
     const zoneRight = zoneLeft + state.config.zoneWidth;
     player.targetX = clamp(target - paddle.width / 2, zoneLeft + 4, zoneRight - paddle.width - 4);
-    const move = (player.targetX - player.paddleX) * Math.min(1, delta * 4);
-    player.paddleX += move;
+    const maxMove = delta * botSkill * 420;
+    const deltaX = player.targetX - player.paddleX;
+    player.paddleX += clamp(deltaX, -maxMove, maxMove);
 
     if (isNaN(player.paddleX)) {
       player.paddleX = paddle.x;
@@ -1551,6 +1585,8 @@ function attachEvents() {
   playerNameInput.addEventListener('input', saveSettings);
   if (resetSettingsButton) {
     resetSettingsButton.addEventListener('click', () => {
+      const confirmed = window.confirm('Are you sure you want to reset to defaults?');
+      if (!confirmed) return;
       restoreSettings(DEFAULT_SETTINGS);
     });
   }
@@ -1699,6 +1735,14 @@ function attachEvents() {
     render();
   });
   playerPaddleSizeInput.addEventListener('change', () => {
+    saveSettings();
+  });
+
+  botSkillLevelInput.addEventListener('input', () => {
+    state.config.botSkill = clamp(Number(botSkillLevelInput.value), 0, 100);
+    botSkillLevelLabel.textContent = `${state.config.botSkill}%`;
+  });
+  botSkillLevelInput.addEventListener('change', () => {
     saveSettings();
   });
 

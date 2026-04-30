@@ -38,7 +38,7 @@
               Flip top-player view
             </label>
           </div>
-          <button id="resetSettingsButton" class="menu-button">Reset defaults</button>
+          <button id="resetSettingsButton" class="menu-button">Reset to defaults</button>
           <div class="menu-item">
             <label for="ballSpawnPoint">Ball spawn point</label>
             <select id="ballSpawnPoint">
@@ -78,6 +78,11 @@
             <label for="playerPaddleSize">Player paddle size (%)</label>
             <input id="playerPaddleSize" type="range" min="1" max="100" step="1" value="2" />
             <div class="menu-note"><span id="playerPaddleSizeLabel">2%</span></div>
+          </div>
+          <div class="menu-item">
+            <label for="botSkillLevel">Bot skill level (%)</label>
+            <input id="botSkillLevel" type="range" min="0" max="100" step="1" value="50" />
+            <div class="menu-note"><span id="botSkillLevelLabel">50%</span></div>
           </div>
           <div class="menu-item">
             <label for="botPaddleSize">Bot paddle size (%)</label>
