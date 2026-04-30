@@ -5,7 +5,6 @@ const ballCountEl = document.getElementById('ballCount');
 const canvasPlayerCountEl = document.getElementById('canvasPlayerCount');
 const canvasBallCountEl = document.getElementById('canvasBallCount');
 const canvasFPSEl = document.getElementById('canvasFPS');
-const canvasFrameTimeEl = document.getElementById('canvasFrameTime');
 const playerNameInput = document.getElementById('playerName');
 const playerColorInput = document.getElementById('playerColor');
 const joinButton = document.getElementById('joinButton');
@@ -20,6 +19,7 @@ const maxBallSpeedInput = document.getElementById('maxBallSpeed');
 const maxBallSpeedLabel = document.getElementById('maxBallSpeedLabel');
 const maxBallCountInput = document.getElementById('maxBallCount');
 const maxBallCountLabel = document.getElementById('maxBallCountLabel');
+const ballSpawnPointInput = document.getElementById('ballSpawnPoint');
 const playerPaddleSizeInput = document.getElementById('playerPaddleSize');
 const playerPaddleSizeLabel = document.getElementById('playerPaddleSizeLabel');
 const botPaddleSizeInput = document.getElementById('botPaddleSize');
@@ -73,6 +73,7 @@ const state = {
     maxBallCount: 400,
     minBallSpeed: 2.8,
     maxBallSpeed: 4.0,
+    ballSpawnPoint: 'left',
     topInset: 10,
     bottomInset: 10,
     worldLeft: 0,
@@ -114,6 +115,7 @@ function saveSettings() {
     minBallSpeed: Number(minBallSpeedInput.value),
     maxBallSpeed: Number(maxBallSpeedInput.value),
     maxBallCount: Number(maxBallCountInput.value),
+    ballSpawnPoint: ballSpawnPointInput.value,
     playerPaddleSize: Number(playerPaddleSizeInput.value),
     botPaddleSize: Number(botPaddleSizeInput.value),
     startingBotCount: Number(startingBotCountInput.value),
@@ -134,6 +136,7 @@ function loadSettings() {
     if (settings.minBallSpeed != null) state.config.minBallSpeed = Number(settings.minBallSpeed);
     if (settings.maxBallSpeed != null) state.config.maxBallSpeed = Number(settings.maxBallSpeed);
     if (settings.maxBallCount != null) state.config.maxBallCount = clamp(Number(settings.maxBallCount), 1, 100000);
+    if (settings.ballSpawnPoint != null) state.config.ballSpawnPoint = settings.ballSpawnPoint;
     if (settings.playerPaddleSize != null) state.config.playerPaddleSize = Number(settings.playerPaddleSize);
     if (settings.botPaddleSize != null) state.config.botPaddleSize = Number(settings.botPaddleSize);
     if (settings.startingBotCount != null) state.config.startingBotCount = clamp(Number(settings.startingBotCount), 0, 1000);
@@ -155,6 +158,7 @@ function applySettingsToInputs() {
   maxBallSpeedLabel.textContent = state.config.maxBallSpeed.toFixed(1);
   maxBallCountInput.value = String(state.config.maxBallCount);
   maxBallCountLabel.textContent = String(state.config.maxBallCount);
+  ballSpawnPointInput.value = state.config.ballSpawnPoint;
   playerPaddleSizeInput.value = String(state.config.playerPaddleSize);
   playerPaddleSizeLabel.textContent = String(state.config.playerPaddleSize);
   botPaddleSizeInput.value = String(state.config.botPaddleSize);
@@ -753,14 +757,18 @@ function spawnBall() {
   const currentBallCount = getBallCount();
   if (currentBallCount >= state.config.maxBallCount) return;
 
-  const { height } = getCanvasSize();
-  const minY = state.config.topInset + CANVAS_MENU_HEIGHT + state.config.ballRadius + 12;
-  const maxY = height - state.config.bottomInset - CANVAS_MENU_HEIGHT - state.config.ballRadius - 12;
-  const startY = minY + Math.random() * (maxY - minY);
+  const worldWidth = state.worldWidth || state.config.zoneWidth;
+  let startX = worldWidth / 2;
+  if (state.config.ballSpawnPoint === 'left') {
+    startX = state.config.ballRadius + 8;
+  } else if (state.config.ballSpawnPoint === 'right') {
+    startX = worldWidth - (state.config.ballRadius + 8);
+  }
+  const startY = getCanvasHeight() / 2;
   if (state.ballWorker) {
-    sendBallWorkerSpawnBall(8, startY, state.config.minBallSpeed * 10, state.config.maxBallSpeed * 10);
+    sendBallWorkerSpawnBall(startX, startY, state.config.minBallSpeed * 10, state.config.maxBallSpeed * 10);
   } else {
-    state.ballEngine.spawnBall(8, startY, state.config.minBallSpeed * 10, state.config.maxBallSpeed * 10);
+    state.ballEngine.spawnBall(startX, startY, state.config.minBallSpeed * 10, state.config.maxBallSpeed * 10);
   }
   updateUI();
 }
@@ -1421,6 +1429,11 @@ function attachEvents() {
     saveSettings();
   });
 
+  ballSpawnPointInput.addEventListener('change', () => {
+    state.config.ballSpawnPoint = ballSpawnPointInput.value;
+    saveSettings();
+  });
+
   playerColorInput.addEventListener('input', () => {
     const current = getCurrentPlayer();
     if (current && current.isLocal) {
@@ -1615,7 +1628,6 @@ function gameLoop() {
   if (now - state.lastFpsUpdate >= 1000) {
     state.lastFpsUpdate = now;
     if (canvasFPSEl) canvasFPSEl.textContent = String(Math.round(state.fps));
-    if (canvasFrameTimeEl) canvasFrameTimeEl.textContent = state.frameTime.toFixed(1);
     refreshCounts();
   }
 

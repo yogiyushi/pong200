@@ -32,6 +32,14 @@
             </label>
           </div>
           <div class="menu-item">
+            <label for="ballSpawnPoint">Ball spawn point</label>
+            <select id="ballSpawnPoint">
+              <option value="left">Left</option>
+              <option value="right">Right</option>
+              <option value="center">Center</option>
+            </select>
+          </div>
+          <div class="menu-item">
             <label for="ballInterval">Ball interval</label>
             <input id="ballInterval" type="range" min="0.001" max="10" step="0.001" value="5" />
             <div class="menu-note"><span id="ballIntervalLabel">5s</span></div>
@@ -87,7 +95,6 @@
       </div>
       <div class="canvas-info-bar">
         <span>FPS: <strong id="canvasFPS">0</strong></span>
-        <span>Frame time: <strong id="canvasFrameTime">0.0</strong>ms</span>
         <span>Players: <strong id="canvasPlayerCount">0</strong></span>
         <span>Balls: <strong id="canvasBallCount">0</strong></span>
       </div>
