@@ -414,8 +414,12 @@ function getBallData() {
 function sendBallWorkerUpdate(delta) {
   if (!state.ballWorker) return;
   const { height } = getCanvasSize();
-  const topPaddleBottom = CANVAS_MENU_HEIGHT + 1 + state.config.paddleHeight;
-  const bottomPaddleTop = height - state.config.paddleHeight - CANVAS_MENU_HEIGHT - 1;
+  const paddleHeight = getPaddleHeight();
+  const viewScale = getViewScale();
+  const menuHeight = getWorldMenuHeight(viewScale);
+  const gap = 1 / viewScale;
+  const topPaddleBottom = menuHeight + gap + paddleHeight;
+  const bottomPaddleTop = height - paddleHeight - menuHeight - gap;
   const paddles = {
     top: [],
     bottom: []
@@ -658,9 +662,13 @@ function chooseSide() {
 
 function createPlayer({ name, flag, color, side, isBot = false, isLocal = false }) {
   const { height } = getCanvasSize();
+  const paddleHeight = getPaddleHeight();
+  const viewScale = getViewScale();
+  const menuHeight = getWorldMenuHeight(viewScale);
+  const gap = 1 / viewScale;
   const baseY = side === 'bottom'
-    ? height - state.config.paddleHeight - CANVAS_MENU_HEIGHT - 1
-    : CANVAS_MENU_HEIGHT + 1;
+    ? height - paddleHeight - menuHeight - gap
+    : menuHeight + gap;
   return {
     id: makeId(isLocal ? 'me' : isBot ? 'bot' : 'pl'),
     name: name || (isBot ? `Bot-${Math.floor(Math.random() * 1000)}` : 'Player'),
@@ -848,6 +856,7 @@ function playerPaddleBounds(player) {
   const zoneLeft = player.zoneIndex * state.config.zoneWidth;
   const zoneRight = zoneLeft + state.config.zoneWidth;
   const width = getPlayerBarWidth(player);
+  const paddleHeight = getPaddleHeight();
 
   if (player.paddleX == null) {
     player.paddleX = zoneLeft + (state.config.zoneWidth - width) / 2;
@@ -866,16 +875,16 @@ function playerPaddleBounds(player) {
   player.barWidth = width;
 
   const viewScale = getViewScale();
-  const menuScale = viewScale >= 0.7 ? 1 : viewScale / 0.7;
-  const menuHeight = CANVAS_MENU_HEIGHT * menuScale;
+  const menuHeight = getWorldMenuHeight(viewScale);
+  const gap = 1 / viewScale;
   const y = player.side === 'bottom'
-    ? height - state.config.paddleHeight - menuHeight - 1
-    : menuHeight + 1;
+    ? height - paddleHeight - menuHeight - gap
+    : menuHeight + gap;
   return {
     x,
     y,
     width,
-    height: state.config.paddleHeight
+    height: paddleHeight
   };
 }
 
@@ -961,8 +970,12 @@ function updateBalls(delta) {
   const { height } = getCanvasSize();
   const worldRight = state.worldWidth;
   const radius = state.config.ballRadius;
-  const topPaddleBottom = CANVAS_MENU_HEIGHT + 1 + state.config.paddleHeight;
-  const bottomPaddleTop = height - state.config.paddleHeight - CANVAS_MENU_HEIGHT - 1;
+  const paddleHeight = getPaddleHeight();
+  const viewScale = getViewScale();
+  const menuHeight = getWorldMenuHeight(viewScale);
+  const gap = 1 / viewScale;
+  const topPaddleBottom = menuHeight + gap + paddleHeight;
+  const bottomPaddleTop = height - paddleHeight - menuHeight - gap;
 
   let writeIdx = 0;
   for (let i = 0, readIdx = 0; i < engine.ballCount; i += 1, readIdx += V) {
@@ -1146,6 +1159,16 @@ function getCanvasHeight() {
   const availableWidth = gamePanel?.clientWidth || window.innerWidth;
   const heightFromWidth = availableWidth / CANVAS_ASPECT_RATIO;
   return Math.max(240, Math.min(availableHeight, heightFromWidth));
+}
+
+function getPaddleHeight() {
+  const canvasHeight = canvas?.clientHeight || getCanvasHeight();
+  return Math.max(2, Math.round(canvasHeight * 0.03));
+}
+
+function getWorldMenuHeight(viewScale) {
+  const menuScale = viewScale >= 0.7 ? 1 : viewScale / 0.7;
+  return CANVAS_MENU_HEIGHT * menuScale / viewScale;
 }
 
 function getViewScale() {
@@ -1369,6 +1392,30 @@ function render() {
 
   ctx.restore();
   drawMenuOverlay(cssWidth, cssHeight, viewScale, state.cameraX, worldHeight);
+
+  ctx.save();
+  ctx.translate(0, yOffset);
+  ctx.scale(viewScale, viewScale);
+  ctx.translate(-state.cameraX, 0);
+  if (current && current.side === 'top' && state.config.flipTopView) {
+    ctx.translate(0, worldHeight);
+    ctx.scale(1, -1);
+  }
+  for (const player of state.players) {
+    if (player.zoneIndex < visibleZoneStart || player.zoneIndex >= visibleZoneEnd) continue;
+    const paddle = playerPaddleBounds(player);
+    const isCurrent = player.id === state.currentPlayerId;
+    const isLocal = player.isLocal;
+    const paddleColor = player.color || (isCurrent ? '#fff' : isLocal ? '#f8f8f8' : '#ccc');
+    ctx.fillStyle = paddleColor;
+    ctx.fillRect(paddle.x, paddle.y, paddle.width, paddle.height);
+    if (isLocal && !isCurrent) {
+      ctx.strokeStyle = 'rgba(255,255,255,0.45)';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(paddle.x + 1, paddle.y + 1, paddle.width - 2, paddle.height - 2);
+    }
+  }
+  ctx.restore();
 }
 
 function refreshCounts() {
@@ -1398,7 +1445,7 @@ function resizeCanvas() {
     ballCanvas.style.height = `${canvasHeight}px`;
   }
   state.config.ballRadius = Math.max(1, canvasHeight * 0.01);
-  state.config.paddleHeight = Math.max(4, canvasHeight * 0.02);
+  state.config.paddleHeight = Math.max(2, Math.round(canvasHeight * 0.03));
   const desiredZoneWidth = canvasHeight * 0.5;
   if (Math.abs(state.config.zoneWidth - desiredZoneWidth) > 1e-2) {
     state.config.zoneWidth = desiredZoneWidth;

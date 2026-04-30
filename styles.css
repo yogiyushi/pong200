@@ -201,8 +201,8 @@ canvas#pongCanvas {
   flex-wrap: nowrap;
   justify-content: space-between;
   align-items: center;
-  padding: 8px 14px;
-  gap: 18px;
+  padding: 0px 14px;
+  gap: 14px;
   min-width: 0;
   overflow-x: auto;
 }
@@ -210,7 +210,7 @@ canvas#pongCanvas {
   display: flex;
   align-items: center;
   gap: 10px;
-  flex: 1 1 220px;
+  flex: 0 1 220px;
   min-width: 0;
   border-radius: 12px;
   padding: 0px 12px;
@@ -224,9 +224,33 @@ canvas#pongCanvas {
   flex-shrink: 0;
 }
 .zoom-bar input[type="range"] {
-  flex: 1 1 0;
-  min-width: 0;
+  flex: 1 1 auto;
+  min-width: 72px;
+  max-width: 100%;
+  width: auto;
   accent-color: #4f4f4f;
+}
+.canvas-info-bar {
+  display: flex;
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 10px;
+  padding: 0;
+  color: rgba(201, 201, 201, 0.88);
+  font-size: 0.76rem;
+  text-align: right;
+  min-height: 16px;
+  min-width: 0;
+}
+.canvas-info-bar span {
+  display: inline-flex;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.canvas-info-bar strong {
+  font-weight: 400;
 }
 .zoom-bar input[type="range"]::-webkit-slider-runnable-track {
   height: 6px;
