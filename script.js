@@ -73,21 +73,21 @@ const state = {
   config: {
     zoneWidth: 200,
     paddleLength: 40,
-    playerPaddleSize: 2,
-    botPaddleSize: 2,
+    playerPaddleSize: 25,
+    botPaddleSize: 25,
     paddleHeight: 10,
     paddleInset: 10,
     ballRadius: 3,
-    spawnInterval: 5000,
-    maxBallCount: 400,
-    minBallSpeed: 2.8,
-    maxBallSpeed: 4.0,
+    spawnInterval: 1,
+    maxBallCount: 1000,
+    minBallSpeed: 4.0,
+    maxBallSpeed: 12.0,
     ballSpawnPoint: 'left',
     topInset: 10,
     bottomInset: 10,
     worldLeft: 0,
     zoomLevel: 1,
-    startingBotCount: 199,
+    startingBotCount: 31,
     flipTopView: false
   },
   ballSpawnToggle: 'left',
@@ -111,7 +111,20 @@ const MAX_CANVAS_PIXEL_RATIO = 1.5;
 const CANVAS_MENU_HEIGHT = 16;
 const CANVAS_ASPECT_RATIO = 960 / 450;
 const SETTINGS_STORAGE_KEY = 'pong200.settings';
-let defaultSettings = null;
+const DEFAULT_SETTINGS = {
+  cameraZoom: 1,
+  spawnIntervalSec: 0.001,
+  minBallSpeed: 4.0,
+  maxBallSpeed: 12.0,
+  maxBallCount: 1000,
+  ballSpawnPoint: 'left',
+  playerPaddleSize: 25,
+  botPaddleSize: 25,
+  startingBotCount: 31,
+  flipTopView: false,
+  playerName: 'You',
+  playerColor: '#ffffff'
+};
 const PLAYER_ICON_SIZE = 14;
 const PLAYER_ICONS = {
   human: new Image(),
@@ -175,10 +188,6 @@ function restoreSettings(settings) {
   render();
 }
 
-function captureDefaultSettings() {
-  defaultSettings = getCurrentSettingsSnapshot();
-}
-
 function updatePlayPauseButton() {
   if (!playPauseToggle || !playPauseIcon) return;
   const paused = state.isPaused;
@@ -220,7 +229,6 @@ async function toggleFullscreen() {
 function loadSettings() {
   const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
   if (!raw) {
-    if (!defaultSettings) captureDefaultSettings();
     return;
   }
   try {
@@ -1521,7 +1529,7 @@ function attachEvents() {
   playerNameInput.addEventListener('input', saveSettings);
   if (resetSettingsButton) {
     resetSettingsButton.addEventListener('click', () => {
-      restoreSettings(defaultSettings || getCurrentSettingsSnapshot());
+      restoreSettings(DEFAULT_SETTINGS);
     });
   }
 
@@ -1808,7 +1816,6 @@ function gameLoop() {
 }
 
 function setup() {
-  captureDefaultSettings();
   attachEvents();
   loadSettings();
   applySettingsToInputs();
