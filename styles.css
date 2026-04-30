@@ -164,6 +164,16 @@ select {
   touch-action: none;
 }
 
+@media (orientation: portrait) {
+  .main-grid {
+    align-items: center;
+  }
+  .game-panel {
+    max-height: 60vh;
+    height: auto;
+  }
+}
+
 /* maincolor canvas background */
 canvas {
   width: 100%;

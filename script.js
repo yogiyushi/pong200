@@ -208,9 +208,9 @@ function applySettingsToInputs() {
   maxBallCountLabel.textContent = String(state.config.maxBallCount);
   ballSpawnPointInput.value = state.config.ballSpawnPoint;
   playerPaddleSizeInput.value = String(state.config.playerPaddleSize);
-  playerPaddleSizeLabel.textContent = String(state.config.playerPaddleSize);
+  playerPaddleSizeLabel.textContent = `${state.config.playerPaddleSize}%`;
   botPaddleSizeInput.value = String(state.config.botPaddleSize);
-  botPaddleSizeLabel.textContent = String(state.config.botPaddleSize);
+  botPaddleSizeLabel.textContent = `${state.config.botPaddleSize}%`;
   startingBotCountInput.value = String(state.config.startingBotCount);
   startingBotCountLabel.textContent = String(state.config.startingBotCount);
   menuFlipView.checked = state.config.flipTopView;
@@ -833,10 +833,8 @@ function spawnBall() {
 
 function getPlayerBarWidth(player) {
   const fullWidth = state.config.zoneWidth;
-  const defaultWidth = player.isBot ? state.config.botPaddleSize : state.config.playerPaddleSize;
-  if (player.isBot) {
-    return defaultWidth;
-  }
+  const defaultPct = player.isBot ? state.config.botPaddleSize : state.config.playerPaddleSize;
+  const defaultWidth = fullWidth * clamp(defaultPct, 5, 100) / 100;
   const elapsed = (performance.now() - (player.barExpandStart || 0)) / 1000;
   if (elapsed < 2) return fullWidth;
   if (elapsed < 6) {
@@ -1396,6 +1394,7 @@ function resizeCanvas() {
   if (ballCanvas) {
     ballCanvas.style.height = `${canvasHeight}px`;
   }
+  state.config.ballRadius = Math.max(1, canvasHeight * 0.01);
   const desiredZoneWidth = canvasHeight * 0.5;
   if (Math.abs(state.config.zoneWidth - desiredZoneWidth) > 1e-2) {
     state.config.zoneWidth = desiredZoneWidth;
@@ -1572,8 +1571,8 @@ function attachEvents() {
   });
 
   playerPaddleSizeInput.addEventListener('input', () => {
-    state.config.playerPaddleSize = clamp(Number(playerPaddleSizeInput.value), 10, 200);
-    playerPaddleSizeLabel.textContent = String(state.config.playerPaddleSize);
+    state.config.playerPaddleSize = clamp(Number(playerPaddleSizeInput.value), 5, 100);
+    playerPaddleSizeLabel.textContent = `${state.config.playerPaddleSize}%`;
     render();
   });
   playerPaddleSizeInput.addEventListener('change', () => {
@@ -1581,8 +1580,8 @@ function attachEvents() {
   });
 
   botPaddleSizeInput.addEventListener('input', () => {
-    state.config.botPaddleSize = clamp(Number(botPaddleSizeInput.value), 10, 200);
-    botPaddleSizeLabel.textContent = String(state.config.botPaddleSize);
+    state.config.botPaddleSize = clamp(Number(botPaddleSizeInput.value), 5, 100);
+    botPaddleSizeLabel.textContent = `${state.config.botPaddleSize}%`;
     render();
   });
   botPaddleSizeInput.addEventListener('change', () => {
@@ -1607,47 +1606,44 @@ function attachEvents() {
   });
 
   let isDragging = false;
+  let dragOriginX = 0;
+  let dragStartPaddleX = 0;
   function pointerMove(event) {
     const current = getCurrentPlayer();
-    if (!current) return;
-    isDragging = true;
+    if (!current || !isDragging) return;
     const rect = canvas.getBoundingClientRect();
-    const rawX = (event.clientX - rect.left) / getViewScale() + state.cameraX;
+    const deltaX = (event.clientX - dragOriginX) * 2;
     const zoneLeft = current.zoneIndex * state.config.zoneWidth;
     const zoneRight = zoneLeft + state.config.zoneWidth;
     const paddle = playerPaddleBounds(current);
     current.paddleX = clamp(
-      rawX,
+      dragStartPaddleX + deltaX,
       zoneLeft + 4,
       zoneRight - paddle.width - 4
     );
   }
 
-  const dragTarget = gamePanel || canvas;
-  dragTarget.addEventListener('pointerdown', (event) => {
+  const mainGrid = document.querySelector('main');
+  document.addEventListener('pointerdown', (event) => {
+    if (!((gamePanel && gamePanel.contains(event.target)) || (mainGrid && mainGrid.contains(event.target)))) return;
     event.preventDefault();
-    dragTarget.setPointerCapture(event.pointerId);
-    pointerMove(event);
-  });
-  dragTarget.addEventListener('pointermove', (event) => {
-    if (event.buttons !== 1) return;
-    pointerMove(event);
-  });
-  dragTarget.addEventListener('pointerup', (event) => {
-    isDragging = false;
-    if (event.pointerId != null && dragTarget.hasPointerCapture(event.pointerId)) {
-      dragTarget.releasePointerCapture(event.pointerId);
+    const current = getCurrentPlayer();
+    if (current) {
+      dragOriginX = event.clientX;
+      dragStartPaddleX = current.paddleX;
+      isDragging = true;
     }
   });
-  dragTarget.addEventListener('pointercancel', (event) => {
-    isDragging = false;
-    if (event.pointerId != null && dragTarget.hasPointerCapture(event.pointerId)) {
-      dragTarget.releasePointerCapture(event.pointerId);
-    }
-  });
-  dragTarget.addEventListener('pointerleave', () => {
+
+  document.addEventListener('pointerup', (event) => {
     isDragging = false;
   });
+
+  document.addEventListener('pointercancel', (event) => {
+    isDragging = false;
+  });
+
+  window.addEventListener('pointermove', pointerMove);
 
   window.addEventListener('keydown', (event) => {
     if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
