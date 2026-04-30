@@ -530,10 +530,12 @@ function sendBallWorkerUpdate(delta) {
     zoneWidth: state.config.zoneWidth,
     topPaddleBottom,
     bottomPaddleTop,
-    menuHeight: CANVAS_MENU_HEIGHT,
+    menuHeight,
     paddles,
     config: {
-      maxBallSpeed: state.config.maxBallSpeed
+      minBallSpeed: state.config.minBallSpeed,
+      maxBallSpeed: state.config.maxBallSpeed,
+      ballSpawnPoint: state.config.ballSpawnPoint
     }
   });
 }
@@ -1046,6 +1048,39 @@ function eliminatePlayer(player) {
   updateUI();
 }
 
+function getWallRespawnCoords() {
+  const worldWidth = state.worldWidth || state.config.zoneWidth;
+  let startX = worldWidth / 2;
+  if (state.config.ballSpawnPoint === 'random') {
+    startX = state.config.ballRadius + 8 + Math.random() * Math.max(0, worldWidth - (state.config.ballRadius + 8) * 2);
+  } else if (state.config.ballSpawnPoint === 'left') {
+    startX = state.config.ballRadius + 8;
+  } else if (state.config.ballSpawnPoint === 'right') {
+    startX = worldWidth - (state.config.ballRadius + 8);
+  } else if (state.config.ballSpawnPoint === 'alternate') {
+    startX = state.ballSpawnToggle === 'left'
+      ? state.config.ballRadius + 8
+      : worldWidth - (state.config.ballRadius + 8);
+    state.ballSpawnToggle = state.ballSpawnToggle === 'left' ? 'right' : 'left';
+  }
+  return {
+    x: startX,
+    y: getCanvasHeight() / 2
+  };
+}
+
+function respawnBall(engine, data, readIdx) {
+  const coords = getWallRespawnCoords();
+  const angleIndex = (Math.random() * engine._trigN) | 0;
+  const ux = engine._trig[angleIndex * 2];
+  const uy = engine._trig[angleIndex * 2 + 1];
+  const speed = Math.random() * ((state.config.maxBallSpeed - state.config.minBallSpeed) * 10) + state.config.minBallSpeed * 10;
+  data[readIdx] = coords.x;
+  data[readIdx + 1] = coords.y;
+  data[readIdx + 2] = speed * ux;
+  data[readIdx + 3] = speed * uy;
+}
+
 function updateBalls(delta) {
   const engine = state.ballEngine;
   if (!engine || engine.ballCount === 0) return;
@@ -1072,12 +1107,12 @@ function updateBalls(delta) {
     x += vx * delta;
     y += vy * delta;
 
-    if (x - radius <= 0) {
-      x = radius;
-      vx = Math.abs(vx);
-    } else if (x + radius >= worldRight) {
-      x = worldRight - radius;
-      vx = -Math.abs(vx);
+    if (x - radius <= 0 || x + radius >= worldRight) {
+      respawnBall(engine, data, readIdx);
+      x = data[readIdx];
+      y = data[readIdx + 1];
+      vx = data[readIdx + 2];
+      vy = data[readIdx + 3];
     }
 
     const baseZone = Math.max(0, Math.min(state.columnCount - 1, Math.floor(x / state.config.zoneWidth)));
@@ -1137,19 +1172,39 @@ function updateBalls(delta) {
       const player = getZonePlayer(zoneIndex, side);
       if (player) {
         eliminatePlayer(player);
-        continue;
+        respawnBall(engine, data, readIdx, {
+          worldWidth: state.worldWidth,
+          height,
+          radius,
+          config: state.config
+        });
+        x = data[readIdx];
+        y = data[readIdx + 1];
+        vx = data[readIdx + 2];
+        vy = data[readIdx + 3];
       }
     }
 
     const outOfRangeHorizontally = x + radius < -60 || x - radius > state.worldWidth + 60;
     const outOfRangeVertically = y + radius < -60 || y - radius > height + 60;
-    if (!outOfRangeHorizontally && !outOfRangeVertically) {
-      data[writeIdx] = x;
-      data[writeIdx + 1] = y;
-      data[writeIdx + 2] = vx;
-      data[writeIdx + 3] = vy;
-      writeIdx += V;
+    if (outOfRangeHorizontally || outOfRangeVertically) {
+      respawnBall(engine, data, readIdx, {
+        worldWidth: state.worldWidth,
+        height,
+        radius,
+        config: state.config
+      });
+      x = data[readIdx];
+      y = data[readIdx + 1];
+      vx = data[readIdx + 2];
+      vy = data[readIdx + 3];
     }
+
+    data[writeIdx] = x;
+    data[writeIdx + 1] = y;
+    data[writeIdx + 2] = vx;
+    data[writeIdx + 3] = vy;
+    writeIdx += V;
   }
   engine.ballCount = writeIdx / V;
 }
@@ -1158,15 +1213,19 @@ function updateBots(delta) {
   const engine = state.ballEngine;
   const ballCount = getBallCount();
   const data = getBallData();
-  const zoneBalls = Array.from({ length: Math.max(1, state.columnCount) }, () => []);
+  const zoneCount = Math.max(1, Number.isInteger(state.columnCount) ? state.columnCount : 1);
+  const zoneBalls = Array.from({ length: zoneCount }, () => []);
   if (ballCount > 0) {
     const V = engine ? engine.varsPerBall : 4;
+    const zoneWidth = Math.max(1, state.config.zoneWidth || 1);
     for (let i = 0, idx = 0; i < ballCount; i += 1, idx += V) {
       const x = data[idx];
       const y = data[idx + 1];
       const vx = data[idx + 2];
       const vy = data[idx + 3];
-      const zoneIndex = Math.max(0, Math.min(state.columnCount - 1, Math.floor(x / state.config.zoneWidth)));
+      const zoneIndex = Number.isFinite(x)
+        ? Math.max(0, Math.min(zoneCount - 1, Math.floor(x / zoneWidth)))
+        : 0;
       zoneBalls[zoneIndex].push({ x, y, vx, vy });
     }
   }
@@ -1207,7 +1266,7 @@ function updateBots(delta) {
     const zoneLeft = player.zoneIndex * state.config.zoneWidth;
     const zoneRight = zoneLeft + state.config.zoneWidth;
     player.targetX = clamp(target - paddle.width / 2, zoneLeft + 4, zoneRight - paddle.width - 4);
-    const maxMove = delta * botSkill * 420;
+    const maxMove = delta * botSkill * 300;
     const deltaX = player.targetX - player.paddleX;
     player.paddleX += clamp(deltaX, -maxMove, maxMove);
 
