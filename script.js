@@ -1133,6 +1133,11 @@ function updateGame(delta) {
 }
 
 function getCanvasHeight() {
+  const panelHeight = gamePanel?.clientHeight || 0;
+  if (panelHeight > 0) {
+    return panelHeight;
+  }
+
   const topBarHeight = document.querySelector('.top-bar')?.getBoundingClientRect().height || 0;
   const bottomPanelHeight = document.querySelector('.bottom-panel')?.getBoundingClientRect().height || 0;
   const infoBarHeight = document.querySelector('.info-bar')?.getBoundingClientRect().height || 0;
@@ -1391,8 +1396,10 @@ function resizeCanvas() {
   if (ballCanvas) {
     ballCanvas.style.height = `${canvasHeight}px`;
   }
-  if (gamePanel) {
-    gamePanel.style.height = `${canvasHeight}px`;
+  const desiredZoneWidth = canvasHeight * 0.5;
+  if (Math.abs(state.config.zoneWidth - desiredZoneWidth) > 1e-2) {
+    state.config.zoneWidth = desiredZoneWidth;
+    syncWorld();
   }
   const rect = canvas.getBoundingClientRect();
   const pixelRatio = Math.min(MAX_CANVAS_PIXEL_RATIO, devicePixelRatio);
