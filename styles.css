@@ -44,7 +44,7 @@ select {
   justify-content: space-between;
   align-items: center;
   padding: 0px 14px;
-  margin-bottom: 10px;
+  /* margin-bottom: 10px; */
   gap: 10px;
   /* border-bottom: 1px solid rgba(255, 255, 255, 0.08); */
 }
@@ -138,7 +138,7 @@ select {
   display: flex;
   flex: 1;
   gap: 18px;
-  padding-bottom: 18px;
+  /* padding-bottom: 18px; */
   padding-top: 18px;
   min-height: 0;
 }
@@ -148,7 +148,7 @@ select {
   flex: 1;
   background: #111111;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 16px;
+  border-radius: 0;
   overflow: hidden;
   min-height: 0;
   touch-action: none;
@@ -161,6 +161,7 @@ canvas {
   display: block;
   background: #010101;
   touch-action: none;
+  border-radius: 0;
 }
 .ball-layer {
   position: absolute;
