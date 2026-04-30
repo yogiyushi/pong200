@@ -72,8 +72,8 @@ const state = {
   config: {
     zoneWidth: 200,
     paddleLength: 40,
-    playerPaddleSize: 40,
-    botPaddleSize: 40,
+    playerPaddleSize: 2,
+    botPaddleSize: 2,
     paddleHeight: 10,
     paddleInset: 10,
     ballRadius: 3,
@@ -834,7 +834,7 @@ function spawnBall() {
 function getPlayerBarWidth(player) {
   const fullWidth = state.config.zoneWidth;
   const defaultPct = player.isBot ? state.config.botPaddleSize : state.config.playerPaddleSize;
-  const defaultWidth = fullWidth * clamp(defaultPct, 5, 100) / 100;
+  const defaultWidth = fullWidth * clamp(defaultPct, 1, 100) / 100;
   const elapsed = (performance.now() - (player.barExpandStart || 0)) / 1000;
   if (elapsed < 2) return fullWidth;
   if (elapsed < 6) {
@@ -865,9 +865,12 @@ function playerPaddleBounds(player) {
   player.paddleX = x;
   player.barWidth = width;
 
+  const viewScale = getViewScale();
+  const menuScale = viewScale >= 0.7 ? 1 : viewScale / 0.7;
+  const menuHeight = CANVAS_MENU_HEIGHT * menuScale;
   const y = player.side === 'bottom'
-    ? height - state.config.paddleHeight - CANVAS_MENU_HEIGHT - 1
-    : CANVAS_MENU_HEIGHT + 1;
+    ? height - state.config.paddleHeight - menuHeight - 1
+    : menuHeight + 1;
   return {
     x,
     y,
@@ -1395,6 +1398,7 @@ function resizeCanvas() {
     ballCanvas.style.height = `${canvasHeight}px`;
   }
   state.config.ballRadius = Math.max(1, canvasHeight * 0.01);
+  state.config.paddleHeight = Math.max(4, canvasHeight * 0.02);
   const desiredZoneWidth = canvasHeight * 0.5;
   if (Math.abs(state.config.zoneWidth - desiredZoneWidth) > 1e-2) {
     state.config.zoneWidth = desiredZoneWidth;
@@ -1571,7 +1575,7 @@ function attachEvents() {
   });
 
   playerPaddleSizeInput.addEventListener('input', () => {
-    state.config.playerPaddleSize = clamp(Number(playerPaddleSizeInput.value), 5, 100);
+    state.config.playerPaddleSize = clamp(Number(playerPaddleSizeInput.value), 1, 100);
     playerPaddleSizeLabel.textContent = `${state.config.playerPaddleSize}%`;
     render();
   });
@@ -1580,7 +1584,7 @@ function attachEvents() {
   });
 
   botPaddleSizeInput.addEventListener('input', () => {
-    state.config.botPaddleSize = clamp(Number(botPaddleSizeInput.value), 5, 100);
+    state.config.botPaddleSize = clamp(Number(botPaddleSizeInput.value), 1, 100);
     botPaddleSizeLabel.textContent = `${state.config.botPaddleSize}%`;
     render();
   });
