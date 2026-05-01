@@ -37,6 +37,7 @@ const optionsToggle = document.getElementById('optionsToggle');
 const optionsMenu = document.getElementById('optionsMenu');
 const resetSettingsButton = document.getElementById('resetSettingsButton');
 const menuFlipView = document.getElementById('menuFlipView');
+const menuCameraPan = document.getElementById('menuCameraPan');
 const startingBotCountInput = document.getElementById('startingBotCount');
 const startingBotCountLabel = document.getElementById('startingBotCountLabel');
 const gamePanel = document.querySelector('.game-panel');
@@ -92,6 +93,7 @@ const state = {
     bottomInset: 10,
     worldLeft: 0,
     zoomLevel: 1,
+    cameraPan: true,
     startingBotCount: 31,
     flipTopView: true,
     playerName: 'You',
@@ -130,6 +132,7 @@ const DEFAULT_SETTINGS = {
   botSkill: 50,
   startingBotCount: 31,
   flipTopView: true,
+  cameraPan: true,
   playerName: 'You',
   playerColor: '#ff00ea'
 };
@@ -154,6 +157,7 @@ function saveSettings() {
     botPaddleSize: Number(botPaddleSizeInput.value),
     startingBotCount: Number(startingBotCountInput.value),
     flipTopView: menuFlipView.checked,
+    cameraPan: menuCameraPan.checked,
     playerName: playerNameInput.value,
     playerColor: playerColorInput.value
   };
@@ -173,6 +177,7 @@ function getCurrentSettingsSnapshot() {
     botPaddleSize: Number(botPaddleSizeInput.value),
     startingBotCount: Number(startingBotCountInput.value),
     flipTopView: menuFlipView.checked,
+    cameraPan: menuCameraPan.checked,
     playerName: playerNameInput.value,
     playerColor: playerColorInput.value
   };
@@ -190,6 +195,7 @@ function restoreSettings(settings) {
   state.config.botPaddleSize = Number(settings.botPaddleSize ?? state.config.botPaddleSize);
   state.config.startingBotCount = clamp(Number(settings.startingBotCount ?? state.config.startingBotCount), 0, 1000);
   state.config.flipTopView = Boolean(settings.flipTopView ?? state.config.flipTopView);
+  state.config.cameraPan = Boolean(settings.cameraPan ?? state.config.cameraPan);
   state.config.playerName = settings.playerName ?? state.config.playerName;
   state.config.playerColor = settings.playerColor ?? state.config.playerColor;
   playerNameInput.value = state.config.playerName;
@@ -256,6 +262,7 @@ function loadSettings() {
     if (settings.botPaddleSize != null) state.config.botPaddleSize = Number(settings.botPaddleSize);
     if (settings.startingBotCount != null) state.config.startingBotCount = clamp(Number(settings.startingBotCount), 0, 1000);
     if (settings.flipTopView != null) state.config.flipTopView = Boolean(settings.flipTopView);
+    if (settings.cameraPan != null) state.config.cameraPan = Boolean(settings.cameraPan);
     if (settings.playerName != null) {
       state.config.playerName = settings.playerName;
       playerNameInput.value = settings.playerName;
@@ -289,6 +296,7 @@ function applySettingsToInputs() {
   startingBotCountInput.value = String(state.config.startingBotCount);
   startingBotCountLabel.textContent = String(state.config.startingBotCount);
   menuFlipView.checked = state.config.flipTopView;
+  menuCameraPan.checked = state.config.cameraPan;
   playerNameInput.value = state.config.playerName || 'You';
   playerColorInput.value = state.config.playerColor || '#ff00ea';
 }
@@ -301,11 +309,44 @@ function setBallIntervalSeconds(seconds) {
   ballIntervalLabel.textContent = `${clamped.toFixed(precision).replace('.', ',')}s`;
 }
 
+function clampCameraX(cameraX, viewScale) {
+  const cssWidth = canvas.clientWidth;
+  const worldWidth = state.worldWidth || state.config.zoneWidth;
+  const visibleWidth = cssWidth / viewScale;
+  const maxCameraX = Math.max(0, worldWidth - visibleWidth);
+  return clamp(cameraX, 0, maxCameraX);
+}
+
 function setCameraZoom(value, save = true) {
   const clamped = clamp(value, 0.1, 1);
   state.config.zoomLevel = clamped;
   cameraZoomInput.value = String(clamped);
   cameraZoomLabel.textContent = `${Math.round(clamped * 100)}%`;
+  if (save) saveSettings();
+  render();
+}
+
+function setCameraZoomAtPoint(value, clientX, save = true) {
+  const oldZoom = state.config.zoomLevel;
+  const newZoom = clamp(value, 0.1, 1);
+  if (newZoom === oldZoom) {
+    return;
+  }
+
+  const rect = canvas.getBoundingClientRect();
+  const localX = clamp(clientX - rect.left, 0, rect.width);
+  if (!state.config.cameraPan) {
+    const worldX = state.cameraX + localX / oldZoom;
+    const newCameraX = worldX - localX / newZoom;
+    state.cameraX = clampCameraX(newCameraX, newZoom);
+    state.cameraXTarget = state.cameraX;
+    state.cameraXStart = state.cameraX;
+    state.cameraXStartTime = performance.now();
+  }
+
+  state.config.zoomLevel = newZoom;
+  cameraZoomInput.value = String(newZoom);
+  cameraZoomLabel.textContent = `${Math.round(newZoom * 100)}%`;
   if (save) saveSettings();
   render();
 }
@@ -1461,7 +1502,7 @@ function render() {
   const worldHeight = getCanvasHeight();
   ctx.clearRect(0, 0, cssWidth, cssHeight);
   const viewScale = getViewScale();
-  const targetCameraX = cameraXForCurrentPlayer(viewScale);
+  const targetCameraX = state.config.cameraPan ? cameraXForCurrentPlayer(viewScale) : state.cameraX;
   const now = performance.now();
   if (targetCameraX !== state.cameraXTarget) {
     state.cameraXTarget = targetCameraX;
@@ -1666,10 +1707,12 @@ function attachEvents() {
 
   const getPointerDistance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 
+  let pinchCenterX = 0;
   const updatePinchZoom = () => {
     if (pinchPointers.size !== 2) return;
     const [first, second] = Array.from(pinchPointers.values());
     const distance = getPointerDistance(first, second);
+    pinchCenterX = (first.x + second.x) / 2;
     if (!pinchStartDistance) {
       pinchStartDistance = distance;
       pinchStartZoom = state.config.zoomLevel;
@@ -1677,7 +1720,12 @@ function attachEvents() {
     }
     if (pinchStartDistance > 0) {
       const ratio = distance / pinchStartDistance;
-      setCameraZoom(pinchStartZoom * ratio);
+      const nextZoom = pinchStartZoom * ratio;
+      if (state.config.cameraPan) {
+        setCameraZoom(nextZoom, false);
+      } else {
+        setCameraZoomAtPoint(nextZoom, pinchCenterX, false);
+      }
     }
   };
 
@@ -1686,7 +1734,12 @@ function attachEvents() {
     const delta = event.deltaY;
     const step = event.shiftKey ? 0.02 : 0.05;
     const direction = delta > 0 ? -1 : 1;
-    setCameraZoom(state.config.zoomLevel + direction * step);
+    const nextZoom = state.config.zoomLevel + direction * step;
+    if (state.config.cameraPan) {
+      setCameraZoom(nextZoom);
+    } else {
+      setCameraZoomAtPoint(nextZoom, event.clientX);
+    }
   };
 
   gamePanel.addEventListener('wheel', updateZoomFromWheel, { passive: false });
@@ -1818,6 +1871,18 @@ function attachEvents() {
     state.config.flipTopView = menuFlipView.checked;
     saveSettings();
   });
+
+  if (menuCameraPan) {
+    menuCameraPan.addEventListener('change', () => {
+      state.config.cameraPan = menuCameraPan.checked;
+      if (!state.config.cameraPan) {
+        state.cameraX = 0;
+        state.cameraXTarget = 0;
+      }
+      saveSettings();
+      render();
+    });
+  }
   optionsToggle.addEventListener('click', (event) => {
     event.stopPropagation();
     const isHidden = optionsMenu.classList.contains('hidden');
