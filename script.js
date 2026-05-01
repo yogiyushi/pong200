@@ -1719,6 +1719,8 @@ function attachEvents() {
   let pinchPointers = new Map();
   let pinchStartDistance = 0;
   let pinchStartZoom = state.config.zoomLevel;
+  let touchPaddleDragId = null;
+  let touchPaddleLastX = 0;
 
   const getPointerDistance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 
@@ -1766,18 +1768,48 @@ function attachEvents() {
   };
 
   gamePanel.addEventListener('wheel', updateZoomFromWheel, { passive: false });
-  gamePanel.addEventListener('pointerdown', (event) => {
+  window.addEventListener('pointerdown', (event) => {
     if (event.pointerType !== 'touch') return;
+    event.preventDefault();
     pinchPointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
-    if (pinchPointers.size === 2) {
+    if (pinchPointers.size === 1) {
+      touchPaddleDragId = event.pointerId;
+      touchPaddleLastX = event.clientX;
       pinchStartDistance = 0;
+      pinchCenterX = null;
+    } else {
+      touchPaddleDragId = null;
+      pinchStartDistance = 0;
+      pinchCenterX = null;
       pinchStartZoom = state.config.zoomLevel;
     }
   });
 
-  gamePanel.addEventListener('pointermove', (event) => {
+  window.addEventListener('pointermove', (event) => {
     if (event.pointerType !== 'touch') return;
     if (!pinchPointers.has(event.pointerId)) return;
+
+    if (touchPaddleDragId === event.pointerId && pinchPointers.size === 1) {
+      event.preventDefault();
+      const current = getCurrentPlayer() || state.players.find((player) => player.isLocal);
+      if (current) {
+        const deltaX = event.clientX - touchPaddleLastX;
+        touchPaddleLastX = event.clientX;
+        if (deltaX !== 0) {
+          const viewScale = getViewScale();
+          const zoneLeft = current.zoneIndex * state.config.zoneWidth;
+          const paddleWidth = getPlayerBarWidth(current);
+          current.paddleX = clamp(
+            current.paddleX + deltaX / viewScale,
+            zoneLeft + 4,
+            zoneLeft + state.config.zoneWidth - paddleWidth - 4
+          );
+        }
+      }
+      pinchPointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      return;
+    }
+
     pinchPointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
     updatePinchZoom();
   });
@@ -1785,14 +1817,17 @@ function attachEvents() {
   const endPinch = (event) => {
     if (event.pointerType !== 'touch') return;
     pinchPointers.delete(event.pointerId);
+    if (event.pointerId === touchPaddleDragId) {
+      touchPaddleDragId = null;
+    }
     if (pinchPointers.size < 2) {
       pinchStartDistance = 0;
       pinchCenterX = null;
     }
   };
 
-  gamePanel.addEventListener('pointerup', endPinch);
-  gamePanel.addEventListener('pointercancel', endPinch);
+  window.addEventListener('pointerup', endPinch);
+  window.addEventListener('pointercancel', endPinch);
 
   ballIntervalInput.addEventListener('input', () => {
     setBallIntervalSeconds(Number(ballIntervalInput.value));
