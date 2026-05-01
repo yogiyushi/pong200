@@ -311,10 +311,21 @@ function setBallIntervalSeconds(seconds) {
 
 function clampCameraX(cameraX, viewScale) {
   const cssWidth = canvas.clientWidth;
-  const worldWidth = state.worldWidth || state.config.zoneWidth;
+  const worldWidth = Math.max(state.worldWidth || 0, state.config.zoneWidth);
   const visibleWidth = cssWidth / viewScale;
+  const minCameraX = Math.min(0, worldWidth - visibleWidth);
   const maxCameraX = Math.max(0, worldWidth - visibleWidth);
-  return clamp(cameraX, 0, maxCameraX);
+  return clamp(cameraX, minCameraX, maxCameraX);
+}
+
+function getCameraXTarget(viewScale) {
+  const cssWidth = canvas.clientWidth;
+  const worldWidth = Math.max(state.worldWidth || 0, state.config.zoneWidth);
+  const visibleWidth = cssWidth / viewScale;
+  if (visibleWidth >= worldWidth) {
+    return (worldWidth - visibleWidth) / 2;
+  }
+  return state.config.cameraPan ? cameraXForCurrentPlayer(viewScale) : clampCameraX(state.cameraX, viewScale);
 }
 
 function setCameraZoom(value, save = true) {
@@ -1502,7 +1513,7 @@ function render() {
   const worldHeight = getCanvasHeight();
   ctx.clearRect(0, 0, cssWidth, cssHeight);
   const viewScale = getViewScale();
-  const targetCameraX = state.config.cameraPan ? cameraXForCurrentPlayer(viewScale) : state.cameraX;
+  const targetCameraX = getCameraXTarget(viewScale);
   const now = performance.now();
   if (targetCameraX !== state.cameraXTarget) {
     state.cameraXTarget = targetCameraX;
@@ -1897,33 +1908,60 @@ function attachEvents() {
   });
 
   let isDragging = false;
-  let dragOriginX = 0;
-  let dragStartPaddleX = 0;
+  let lastPointerX = null;
   function pointerMove(event) {
     const current = getCurrentPlayer();
-    if (!current || !isDragging) return;
-    const rect = canvas.getBoundingClientRect();
-    const deltaX = (event.clientX - dragOriginX) * 2;
+    if (!current || event.pointerType === 'touch') return;
+    if (lastPointerX == null) {
+      lastPointerX = event.clientX;
+      return;
+    }
+
+    const deltaX = event.clientX - lastPointerX;
+    lastPointerX = event.clientX;
+    if (deltaX === 0) return;
+
     const zoneLeft = current.zoneIndex * state.config.zoneWidth;
     const zoneRight = zoneLeft + state.config.zoneWidth;
-    const paddle = playerPaddleBounds(current);
+    const paddleWidth = getPlayerBarWidth(current);
     current.paddleX = clamp(
-      dragStartPaddleX + deltaX,
+      current.paddleX + deltaX,
       zoneLeft + 4,
-      zoneRight - paddle.width - 4
+      zoneRight - paddleWidth - 4
     );
   }
 
   const mainGrid = document.querySelector('main');
   document.addEventListener('pointerdown', (event) => {
-    if (!((gamePanel && gamePanel.contains(event.target)) || (mainGrid && mainGrid.contains(event.target)))) return;
-    event.preventDefault();
+    if (!(gamePanel && gamePanel.contains(event.target))) return;
     const current = getCurrentPlayer();
-    if (current) {
-      dragOriginX = event.clientX;
-      dragStartPaddleX = current.paddleX;
-      isDragging = true;
-    }
+    if (!current || event.button !== 0) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const localX = event.clientX - rect.left;
+    const localY = event.clientY - rect.top;
+    const viewScale = getViewScale();
+    const worldHeight = getCanvasHeight();
+    const yOffset = (canvas.clientHeight - worldHeight * viewScale) / 2;
+    const worldX = state.cameraX + localX / viewScale;
+    const worldY = state.config.flipTopView && current.side === 'top'
+      ? worldHeight - ((localY - yOffset) / viewScale)
+      : (localY - yOffset) / viewScale;
+
+    const paddle = playerPaddleBounds(current);
+    const hoverMargin = 12;
+    const overPaddle =
+      worldX >= paddle.x - hoverMargin &&
+      worldX <= paddle.x + paddle.width + hoverMargin &&
+      worldY >= paddle.y - hoverMargin &&
+      worldY <= paddle.y + paddle.height + hoverMargin;
+
+    if (!overPaddle) return;
+
+    event.preventDefault();
+    dragOriginX = event.clientX;
+    dragStartPaddleX = current.paddleX;
+    isDragging = true;
   });
 
   document.addEventListener('pointerup', (event) => {
@@ -1935,6 +1973,9 @@ function attachEvents() {
   });
 
   window.addEventListener('pointermove', pointerMove);
+  window.addEventListener('pointerleave', () => {
+    lastPointerX = null;
+  });
 
   window.addEventListener('keydown', (event) => {
     if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
