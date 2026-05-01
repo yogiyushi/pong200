@@ -104,6 +104,7 @@ const state = {
   cameraXTarget: 0,
   cameraXStart: 0,
   cameraXStartTime: performance.now(),
+  cameraXManual: false,
   fps: 0,
   frameTime: 0,
   lastFpsUpdate: performance.now(),
@@ -322,6 +323,9 @@ function getCameraXTarget(viewScale) {
   const cssWidth = canvas.clientWidth;
   const worldWidth = Math.max(state.worldWidth || 0, state.config.zoneWidth);
   const visibleWidth = cssWidth / viewScale;
+  if (state.cameraXManual) {
+    return clampCameraX(state.cameraX, viewScale);
+  }
   if (visibleWidth >= worldWidth) {
     return (worldWidth - visibleWidth) / 2;
   }
@@ -329,7 +333,7 @@ function getCameraXTarget(viewScale) {
 }
 
 function setCameraZoom(value, save = true) {
-  const clamped = clamp(value, 0.1, 1);
+  const clamped = clamp(value, 0.01, 1);
   state.config.zoomLevel = clamped;
   cameraZoomInput.value = String(clamped);
   cameraZoomLabel.textContent = `${Math.round(clamped * 100)}%`;
@@ -339,7 +343,7 @@ function setCameraZoom(value, save = true) {
 
 function setCameraZoomAtPoint(value, clientX, save = true) {
   const oldZoom = state.config.zoomLevel;
-  const newZoom = clamp(value, 0.1, 1);
+  const newZoom = clamp(value, 0.01, 1);
   if (newZoom === oldZoom) {
     return;
   }
@@ -1393,7 +1397,7 @@ function getWorldMenuHeight(viewScale) {
 }
 
 function getViewScale() {
-  return clamp(state.config.zoomLevel, 0.1, 1);
+  return clamp(state.config.zoomLevel, 0.01, 1);
 }
 
 function drawMenuOverlay(cssWidth, cssHeight, viewScale, cameraX, worldHeight) {
@@ -1718,12 +1722,24 @@ function attachEvents() {
 
   const getPointerDistance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 
-  let pinchCenterX = 0;
+  let pinchCenterX = null;
   const updatePinchZoom = () => {
     if (pinchPointers.size !== 2) return;
     const [first, second] = Array.from(pinchPointers.values());
     const distance = getPointerDistance(first, second);
-    pinchCenterX = (first.x + second.x) / 2;
+    const centerX = (first.x + second.x) / 2;
+    if (pinchCenterX !== null) {
+      const viewScale = getViewScale();
+      const deltaX = centerX - pinchCenterX;
+      if (deltaX !== 0) {
+        state.cameraXManual = true;
+        state.cameraX = clampCameraX(state.cameraX - deltaX / viewScale, viewScale);
+        state.cameraXTarget = state.cameraX;
+        state.cameraXStart = state.cameraX;
+        state.cameraXStartTime = performance.now();
+      }
+    }
+    pinchCenterX = centerX;
     if (!pinchStartDistance) {
       pinchStartDistance = distance;
       pinchStartZoom = state.config.zoomLevel;
@@ -1746,11 +1762,7 @@ function attachEvents() {
     const step = event.shiftKey ? 0.02 : 0.05;
     const direction = delta > 0 ? -1 : 1;
     const nextZoom = state.config.zoomLevel + direction * step;
-    if (state.config.cameraPan) {
-      setCameraZoom(nextZoom);
-    } else {
-      setCameraZoomAtPoint(nextZoom, event.clientX);
-    }
+    setCameraZoomAtPoint(nextZoom, event.clientX);
   };
 
   gamePanel.addEventListener('wheel', updateZoomFromWheel, { passive: false });
@@ -1775,6 +1787,7 @@ function attachEvents() {
     pinchPointers.delete(event.pointerId);
     if (pinchPointers.size < 2) {
       pinchStartDistance = 0;
+      pinchCenterX = null;
     }
   };
 
@@ -1907,11 +1920,34 @@ function attachEvents() {
     }
   });
 
-  let isDragging = false;
+  let isCameraDragging = false;
   let lastPointerX = null;
   function pointerMove(event) {
+    if (event.pointerType === 'touch') return;
+    const viewScale = getViewScale();
+
+    if (event.buttons & 1 && isCameraDragging) {
+      const deltaX = event.clientX - (lastPointerX ?? event.clientX);
+      lastPointerX = event.clientX;
+      if (deltaX !== 0) {
+        state.cameraXManual = true;
+        state.cameraX = clampCameraX(state.cameraX - deltaX / viewScale, viewScale);
+        state.cameraXTarget = state.cameraX;
+        state.cameraXStart = state.cameraX;
+        state.cameraXStartTime = performance.now();
+      }
+      return;
+    }
+
+    if (event.buttons & 1) {
+      return;
+    }
+
     const current = getCurrentPlayer();
-    if (!current || event.pointerType === 'touch') return;
+    if (!current) {
+      lastPointerX = event.clientX;
+      return;
+    }
     if (lastPointerX == null) {
       lastPointerX = event.clientX;
       return;
@@ -1922,54 +1958,30 @@ function attachEvents() {
     if (deltaX === 0) return;
 
     const zoneLeft = current.zoneIndex * state.config.zoneWidth;
-    const zoneRight = zoneLeft + state.config.zoneWidth;
     const paddleWidth = getPlayerBarWidth(current);
     current.paddleX = clamp(
       current.paddleX + deltaX,
       zoneLeft + 4,
-      zoneRight - paddleWidth - 4
+      zoneLeft + state.config.zoneWidth - paddleWidth - 4
     );
   }
 
-  const mainGrid = document.querySelector('main');
   document.addEventListener('pointerdown', (event) => {
-    if (!(gamePanel && gamePanel.contains(event.target))) return;
-    const current = getCurrentPlayer();
-    if (!current || event.button !== 0) return;
+    if (!gamePanel || !gamePanel.contains(event.target) || event.pointerType === 'touch') return;
+    if (event.button !== 0) return;
 
-    const rect = canvas.getBoundingClientRect();
-    const localX = event.clientX - rect.left;
-    const localY = event.clientY - rect.top;
-    const viewScale = getViewScale();
-    const worldHeight = getCanvasHeight();
-    const yOffset = (canvas.clientHeight - worldHeight * viewScale) / 2;
-    const worldX = state.cameraX + localX / viewScale;
-    const worldY = state.config.flipTopView && current.side === 'top'
-      ? worldHeight - ((localY - yOffset) / viewScale)
-      : (localY - yOffset) / viewScale;
-
-    const paddle = playerPaddleBounds(current);
-    const hoverMargin = 12;
-    const overPaddle =
-      worldX >= paddle.x - hoverMargin &&
-      worldX <= paddle.x + paddle.width + hoverMargin &&
-      worldY >= paddle.y - hoverMargin &&
-      worldY <= paddle.y + paddle.height + hoverMargin;
-
-    if (!overPaddle) return;
-
-    event.preventDefault();
-    dragOriginX = event.clientX;
-    dragStartPaddleX = current.paddleX;
-    isDragging = true;
+    isCameraDragging = true;
+    lastPointerX = event.clientX;
   });
 
-  document.addEventListener('pointerup', (event) => {
-    isDragging = false;
+  document.addEventListener('pointerup', () => {
+    isCameraDragging = false;
+    lastPointerX = null;
   });
 
-  document.addEventListener('pointercancel', (event) => {
-    isDragging = false;
+  document.addEventListener('pointercancel', () => {
+    isCameraDragging = false;
+    lastPointerX = null;
   });
 
   window.addEventListener('pointermove', pointerMove);
