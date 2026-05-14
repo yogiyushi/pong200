@@ -333,7 +333,11 @@ function getCameraXTarget(viewScale) {
 }
 
 function setCameraZoom(value, save = true) {
-  const clamped = clamp(value, 0.01, 1);
+  // Calculate minimum zoom so world width never becomes smaller than screen width
+  const cssWidth = canvas.clientWidth;
+  const worldWidth = Math.max(state.worldWidth || 0, state.config.zoneWidth);
+  const minZoom = cssWidth / worldWidth;
+  const clamped = clamp(value, minZoom, 1);
   state.config.zoomLevel = clamped;
   cameraZoomInput.value = String(clamped);
   cameraZoomLabel.textContent = `${Math.round(clamped * 100)}%`;
@@ -343,7 +347,11 @@ function setCameraZoom(value, save = true) {
 
 function setCameraZoomAtPoint(value, clientX, save = true) {
   const oldZoom = state.config.zoomLevel;
-  const newZoom = clamp(value, 0.01, 1);
+  // Calculate minimum zoom so world width never becomes smaller than screen width
+  const cssWidth = canvas.clientWidth;
+  const worldWidth = Math.max(state.worldWidth || 0, state.config.zoneWidth);
+  const minZoom = cssWidth / worldWidth;
+  const newZoom = clamp(value, minZoom, 1);
   if (newZoom === oldZoom) {
     return;
   }
@@ -1397,7 +1405,11 @@ function getWorldMenuHeight(viewScale) {
 }
 
 function getViewScale() {
-  return clamp(state.config.zoomLevel, 0.01, 1);
+  // Calculate minimum zoom so world width never becomes smaller than screen width
+  const cssWidth = canvas.clientWidth;
+  const worldWidth = Math.max(state.worldWidth || 0, state.config.zoneWidth);
+  const minZoom = cssWidth / worldWidth;
+  return clamp(state.config.zoomLevel, minZoom, 1);
 }
 
 function drawMenuOverlay(cssWidth, cssHeight, viewScale, cameraX, worldHeight) {
@@ -1708,8 +1720,12 @@ function attachEvents() {
 
   cameraZoomInput.addEventListener('input', () => {
     const value = Number(cameraZoomInput.value);
-    state.config.zoomLevel = value;
-    cameraZoomLabel.textContent = `${Math.round(value * 100)}%`;
+    // Calculate minimum zoom so world width never becomes smaller than screen width
+    const cssWidth = canvas.clientWidth;
+    const worldWidth = Math.max(state.worldWidth || 0, state.config.zoneWidth);
+    const minZoom = cssWidth / worldWidth;
+    state.config.zoomLevel = clamp(value, minZoom, 1);
+    cameraZoomLabel.textContent = `${Math.round(state.config.zoomLevel * 100)}%`;
     render();
   });
   cameraZoomInput.addEventListener('change', () => {
