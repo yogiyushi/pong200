@@ -84,7 +84,7 @@ const state = {
     paddleHeight: 10,
     paddleInset: 10,
     ballRadius: 3,
-    spawnInterval: 1,
+    spawnInterval: 0.5,
     maxBallCount: 1000,
     minBallSpeed: 4.0,
     maxBallSpeed: 12.0,
@@ -115,18 +115,18 @@ const state = {
 };
 
 const BALL_INTERVAL_MIN_SEC = 0.001;
-const BALL_INTERVAL_MAX_SEC = 10;
-const BALL_INTERVAL_STEP_SEC = 0.001;
+const BALL_INTERVAL_MAX_SEC = 1.0;
+const BALL_INTERVAL_STEP_SEC = 0.01;
 const MAX_CANVAS_PIXEL_RATIO = 1.5;
 const CANVAS_MENU_HEIGHT = 16;
 const CANVAS_ASPECT_RATIO = 960 / 450;
 const SETTINGS_STORAGE_KEY = 'pong200.settings';
 const DEFAULT_SETTINGS = {
   cameraZoom: 1,
-  spawnIntervalSec: 0.001,
+  spawnIntervalSec: 0.5,
   minBallSpeed: 4.0,
   maxBallSpeed: 12.0,
-  maxBallCount: 1000,
+  
   ballSpawnPoint: 'left',
   playerPaddleSize: 25,
   botPaddleSize: 25,
